@@ -28,6 +28,9 @@ typedef struct
 	char cluster_name[MAXLEN];
 	int node;
 	char conninfo[MAXLEN];
+	int failover;
+	char promote_command[MAXLEN]; 
+	char follow_command[MAXLEN]; 
 	char loglevel[MAXLEN];
 	char logfacility[MAXLEN];
 	char rsync_options[QUERY_STR_LEN];

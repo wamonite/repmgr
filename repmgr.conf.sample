@@ -12,6 +12,11 @@ node=2
 conninfo='host=192.168.204.104'
 rsync_options=--archive --checksum --compress --progress --rsh=ssh
 
+# Autofailover options
+failover=automatic
+promote_command='repmgr promote'
+follow_command='repmgr follow'
+
 # Log level: possible values are DEBUG, INFO, NOTICE, WARNING, ERR, ALERT, CRIT or EMERG
 # Default: NOTICE
 loglevel=NOTICE

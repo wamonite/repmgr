@@ -34,6 +34,9 @@ parse_config(const char* config_file, t_configuration_options* options)
 	memset(options->cluster_name, 0, sizeof(options->cluster_name));
 	options->node = -1;
 	memset(options->conninfo, 0, sizeof(options->conninfo));
+	options->failover = MANUAL_FAILOVER;
+	memset(options->promote_command, 0, sizeof(options->promote_command));
+	memset(options->follow_command, 0, sizeof(options->follow_command));
 	memset(options->rsync_options, 0, sizeof(options->rsync_options));
 
 	/*
@@ -69,6 +72,25 @@ parse_config(const char* config_file, t_configuration_options* options)
 			strncpy (options->loglevel, value, MAXLEN);
 		else if (strcmp(name, "logfacility") == 0)
 			strncpy (options->logfacility, value, MAXLEN);
+		else if (strcmp(name, "failover") == 0)
+		{
+			char *failoverstr;
+			strncpy(failoverstr, value, MAXLEN);
+
+			if (strcmp(failoverstr, "manual"))
+				options->failover = MANUAL_FAILOVER;
+			else if (strcmp(failoverstr, "automatic"))
+				options->failover = AUTOMATIC_FAILOVER;
+			else
+			{
+				printf ("WARNING: value for failover option is incorrect, it should be automatic or manual. Defaulting to manual.\n");
+				options->failover = MANUAL_FAILOVER;
+			}
+		}
+		else if (strcmp(name, "promote_command") == 0)
+			strncpy(options->promote_command, value, MAXLEN);
+		else if (strcmp(name, "follow_command") == 0)
+			strncpy(options->follow_command, value, MAXLEN);
 		else
 			printf ("WARNING: %s/%s: Unknown name/value pair!\n", name, value);
 	}

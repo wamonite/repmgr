@@ -42,6 +42,9 @@
 #define DEFAULT_DBNAME			"postgres"
 #define DEFAULT_REPMGR_SCHEMA_PREFIX	"repmgr_"
 
+#define MANUAL_FAILOVER		0
+#define AUTOMATIC_FAILOVER	1
+
 /* Run time options type */
 typedef struct
 {
