@@ -31,12 +31,28 @@
 #include "log.h"
 #include "strutil.h"
 
+#include "access/xlogdefs.h"
 #include "libpq/pqsignal.h"
 
+/* 
+ * Struct to keep info about the nodes, used in the voting process in 
+ * do_failover() and do_switchback()
+ */
+typedef struct nodeInfo
+{
+    int nodeId;
+    XLogRecPtr xlog_location;
+    bool is_ready;
+} nodeInfo;
+
+
+char    myClusterName[MAXLEN];
 
 /* Local info */
 t_configuration_options local_options;
 int     myLocalMode = STANDBY_MODE;
+int     myLocalId   = -1;
+char	myLocalConninfo[MAXLEN];
 PGconn *myLocalConn = NULL;
 
 /* Primary info */
@@ -60,11 +76,12 @@ t_configuration_options config = {};
 
 static void help(const char* progname);
 static void usage(void);
-static void checkClusterConfiguration(PGconn *conn,PGconn *primary);
+static void checkClusterConfiguration(PGconn *conn, PGconn *primary);
 static void checkNodeConfiguration(char *conninfo);
 static void CancelQuery(void);
 
 static void MonitorExecute(void);
+static void do_failover(void);
 
 static unsigned long long int walLocationToBytes(char *wal_location);
 
@@ -266,29 +283,41 @@ MonitorExecute(void)
 	}
 	if (PQstatus(primaryConn) != CONNECTION_OK)
 	{
-		log_err(_("We couldn't reconnect to master. Now checking if another node has been promoted.\n"));
-		for (connection_retries = 0; connection_retries < 6; connection_retries++)
+		if (local_options.failover == MANUAL_FAILOVER)
 		{
-			primaryConn = getMasterConnection(myLocalConn, local_options.node,
-			                                  local_options.cluster_name, &primary_options.node,NULL);
-			if (PQstatus(primaryConn) == CONNECTION_OK)
+			log_err(_("We couldn't reconnect to master. Now checking if another node has been promoted.\n"));
+			for (connection_retries = 0; connection_retries < 6; connection_retries++)
 			{
-				/* Connected, we can continue the process so break the loop */
-				log_err(_("Connected to node %d, continue monitoring.\n"), primary_options.node);
-				break;
+				primaryConn = getMasterConnection(myLocalConn, local_options.node,
+			                                  local_options.cluster_name, &primary_options.node, NULL);
+				if (PQstatus(primaryConn) == CONNECTION_OK)
+				{
+					/* Connected, we can continue the process so break the loop */
+					log_err(_("Connected to node %d, continue monitoring.\n"), primary_options.node);
+					break;
+				}
+				else
+				{
+					log_err(_("We haven't found a new master, waiting before retry...\n"));
+					/* wait 5 minutes before retries, after 6 failures (30 minutes) we stop trying */
+					sleep(300);
+				}
 			}
-			else
+
+			if (PQstatus(primaryConn) != CONNECTION_OK)
 			{
-				log_err(_("We haven't found a new master, waiting before retry...\n"));
-				/* wait 5 minutes before retries, after 6 failures (30 minutes) we stop trying */
-				sleep(300);
+				log_err(_("We couldn't reconnect for long enough, exiting...\n"));
+				exit(ERR_DB_CON);
 			}
 		}
-	}
-	if (PQstatus(primaryConn) != CONNECTION_OK)
-	{
-		log_err(_("We couldn't reconnect for long enough, exiting...\n"));
-		exit(ERR_DB_CON);
+		else if (local_options.failover == AUTOMATIC_FAILOVER)
+		{
+			/*
+			 * When we returns from this function we will have a new primary and
+			 * a new primaryConn
+			 */ 
+			do_failover();
+		}
 	}
 
 	/* Check if we still are a standby, we could have been promoted */
@@ -367,6 +396,164 @@ MonitorExecute(void)
 	if (PQsendQuery(primaryConn, sqlquery) == 0)
 		log_warning("Query could not be sent to primary. %s\n",
 		            PQerrorMessage(primaryConn));
+}
+
+
+static void
+do_failover(void)
+{
+	PGresult *res1;
+	PGresult *res2;
+	char 	sqlquery[8192];
+
+	/* initialize on 1 because i'm ignoring myself most of the time */
+	int		total_nodes = 1;
+	int		visible_nodes = 1;
+
+	int		i;
+
+	int 	node;
+	char	nodeConninfo[MAXLEN];
+	int		numelm;
+
+    unsigned int uxlogid;
+    unsigned int uxrecoff;
+	char last_wal_standby_applied[MAXLEN];
+
+ 	PGconn	*nodeConn;
+
+ 	/* 
+     * will get info about until 50 nodes, 
+     * which seems to be large enough for most scenarios
+     */
+ 	nodeInfo nodes[50];
+ 	nodeInfo best_candidate;
+ 
+	/* first we get info about this node, and update shared memory */
+	sprintf(sqlquery, "SELECT pg_last_xlog_replay_location()");
+	res1 = PQexec(myLocalConn, sqlquery);
+	if (PQresultStatus(res1) != PGRES_TUPLES_OK)
+	{
+		log_err(_("PQexec failed: %s.\nReport an invalid value to not be considered as new primary and exit.\n", PQerrorMessage(myLocalConn)));
+		PQclear(res1);
+		sprintf(sqlquery, "SELECT pg_update_standby_location('%X/%X')", 0, 0);
+		/* Ignore errors, if this server has crashed other standbys won't see it anyway */
+		res1 = PQexec(myLocalConn, sqlquery);
+		PQclear(res1);
+		exit(ERR_DB_QUERY);
+	}
+
+	strncpy(last_wal_standby_applied, PQgetvalue(res1, 0, 0), MAXLEN);
+	PQclear(res1);
+
+	sprintf(sqlquery, "SELECT pg_update_standby_location('%s')", 
+				last_wal_standby_applied);
+	/* Ignore errors, if this server has crashed other standbys won't see it anyway */
+	res1 = PQexec(myLocalConn, sqlquery);
+	PQclear(res1);
+ 
+	/* get a list of standby nodes, ignoring myself */
+ 	sprintf(sqlquery, "SELECT * " 
+ 					  "  FROM repl_nodes "
+  					  " WHERE id IN (SELECT standby_node FROM repl_status WHERE standby_node <> %d) "
+					  "   AND cluster = '%s' ",
+ 					  myLocalId, myClusterName);
+ 
+     res1 = PQexec(myLocalConn, sqlquery);
+     if (PQresultStatus(res1) != PGRES_TUPLES_OK)
+     {
+         log_err(_("Can't get nodes info: %s", PQerrorMessage(myLocalConn)));
+         PQclear(res1);
+         PQfinish(myLocalConn);
+ 		exit(ERR_BAD_QUERY);
+     }
+ 
+ 	/* ask for the locations of other nodes */
+	for (i = 0; i < PQntuples(res1); i++)
+	{
+		node = atoi(PQgetvalue(res1, i, 0));
+		/* Initialize on false so if we can't reach this node we know that later */
+ 		nodes[i].is_ready = false;
+ 		strncpy(nodeConninfo, PQgetvalue(res1, i, 2), MAXLEN);
+ 		nodeConn = establishDBConnection(nodeConninfo, false);
+		/* if we can't see the node just skip it */
+		if (PQstatus(nodeConn) != CONNECTION_OK)
+			continue;
+ 
+ 		sprintf(sqlquery, "SELECT repmgr_get_last_standby_location()");
+     	res2 = PQexec(nodeConn, sqlquery);
+     	if (PQresultStatus(res2) != PGRES_TUPLES_OK)
+     	{
+     	    log_info(_("Can't get node's last standby location: %s", PQerrorMessage(nodeConn)));
+     	    PQclear(res2);
+         	PQfinish(nodeConn);
+ 			continue;
+     	}
+ 
+		visible_nodes++;
+
+		if (sscanf(PQgetvalue(res2, i, 0), "%X/%X", &uxlogid, &uxrecoff) != 2)
+			log_info(_("could not parse transaction log location \"%s\"", PQgetvalue(res2, i, 0)));
+
+ 		nodes[i].nodeId = node;
+ 		nodes[i].xlog_location.xlogid = uxlogid;
+ 		nodes[i].xlog_location.xrecoff = uxrecoff;
+ 		nodes[i].is_ready = true;
+ 
+		PQclear(res2);
+		PQfinish(nodeConn);
+     }
+ 	PQclear(res1);
+	/* Close the connection to this server */
+ 	PQfinish(myLocalConn);
+	/* total nodes that are registered */
+	total_nodes += i; 
+ 	numelm = i;
+ 
+	/* 
+	 * am i on the group that should keep alive? 
+	 * if i see less than half of total_nodes then i should do nothing
+	 */
+	if (visible_nodes < (total_nodes / 2))
+	{
+		log_err(_("Can't reach most of the nodes, let the others standby servers decide which one will be the primary.\n"
+				  "Manual action will be needed to readd this node to the cluster."));
+		exit(ERR_FAILOVER_FAIL);
+	}
+
+	/* start assuming this standby is the best candidate and compare with the other ones to decide */
+	if (sscanf(PQgetvalue(res2, i, 0), "%X/%X", &uxlogid, &uxrecoff) != 2)
+		log_info(_("could not parse transaction log location \"%s\"", PQgetvalue(res2, i, 0)));
+
+ 	best_candidate.nodeId = myLocalId;
+ 	best_candidate.xlog_location.xlogid = uxlogid;
+ 	best_candidate.xlog_location.xrecoff = uxrecoff;
+ 	best_candidate.is_ready = true;
+ 
+ 	/* determine which one is the best candidate to promote to primary */
+ 	for (i = 0; i <= numelm; i++)
+ 	{
+		if (!nodes[i].is_ready)
+			continue;
+
+ 		/* we use the macros provided to compare XLogPtr */
+ 		if (XLByteLT(best_candidate.xlog_location, nodes[i].xlog_location))
+ 		{
+ 			best_candidate.nodeId = nodes[i].nodeId;
+ 			best_candidate.xlog_location.xlogid = nodes[i].xlog_location.xlogid;
+ 			best_candidate.xlog_location.xrecoff = nodes[i].xlog_location.xrecoff;
+ 			best_candidate.is_ready = nodes[i].is_ready;
+ 		}	
+ 	}
+ 
+	/* once we know who is the best candidate, promote it */
+	if (best_candidate.nodeId == myLocalId)
+	 	system(promote_command);
+	else
+		system(follow_command);
+
+	/* and reconnect to the local database */
+	myLocalConn = establishDBConnection(local_options.conninfo, true);
 }
 
 
