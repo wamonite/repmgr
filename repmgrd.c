@@ -421,6 +421,7 @@ do_failover(void)
 	int		visible_nodes = 1;
 
 	int		i;
+	int		r;
 
 	int 	node;
 	char	nodeConninfo[MAXLEN];
