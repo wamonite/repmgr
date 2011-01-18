@@ -36,7 +36,7 @@
 
 /* 
  * Struct to keep info about the nodes, used in the voting process in 
- * do_failover() and do_switchback()
+ * do_failover() 
  */
 typedef struct nodeInfo
 {
@@ -81,6 +81,7 @@ static void checkNodeConfiguration(char *conninfo);
 static void CancelQuery(void);
 
 static void MonitorExecute(void);
+static void CheckPrimaryConnection(void);
 static void do_failover(void);
 
 static unsigned long long int walLocationToBytes(char *wal_location);
@@ -95,16 +96,6 @@ static void setup_cancel_handler(void);
 		PQfinish(myLocalConn);	\
 	if (primaryConn != NULL && primaryConn != myLocalConn) \
 		PQfinish(primaryConn);
-
-/*
- * Every 3 seconds, insert monitor info
- */
-#define MonitorCheck()						  \
-	for (;;)								  \
-	{										  \
-		MonitorExecute();					  \
-		sleep(3);							  \
-	}
 
 
 int
@@ -191,37 +182,56 @@ main(int argc, char **argv)
 	 * and start monitor
 	 */
 	myLocalMode = is_standby(myLocalConn) ? STANDBY_MODE : PRIMARY_MODE;
-	if (myLocalMode == PRIMARY_MODE)
+	switch (myLocalMode)
 	{
-		primary_options.node = local_options.node;
-		strncpy(primary_options.conninfo, local_options.conninfo, MAXLEN);
-		primaryConn = myLocalConn;
-	}
-	else
-	{
-		/* I need the id of the primary as well as a connection to it */
-		log_info(_("%s Connecting to primary for cluster '%s'\n"),
-		         progname, local_options.cluster_name);
-		primaryConn = getMasterConnection(myLocalConn, local_options.node,
-		                                  local_options.cluster_name,
-		                                  &primary_options.node,NULL);
-		if (primaryConn == NULL)
-		{
-			CloseConnections();
-			exit(ERR_BAD_CONFIG);
-		}
-	}
+		case PRIMARY_MODE:
+			primary_options.node = local_options.node;
+			strncpy(primary_options.conninfo, local_options.conninfo, MAXLEN);
+			primaryConn = myLocalConn;
 
-	checkClusterConfiguration(myLocalConn,primaryConn);
-	checkNodeConfiguration(local_options.conninfo);
-	if (myLocalMode == STANDBY_MODE)
-	{
-		log_info(_("%s Starting continuous standby node monitoring\n"), progname);
-		MonitorCheck();
-	}
-	else
-	{
-		log_info(_("%s This is a primary node, program not needed here; exiting'\n"), progname);
+			checkClusterConfiguration(myLocalConn, primaryConn);
+			checkNodeConfiguration(local_options.conninfo);
+
+			log_info(_("%s Starting continuous primary connection check\n"), progname);
+			/* Check that primary is still alive, and standbies are sending info */
+			for (;;)
+			{
+				CheckPrimaryConnection();
+/*
+				CheckActiveStandbiesConnections();
+				CheckInactiveStandbies();
+*/
+				sleep(3);
+			}
+			break;
+		case STANDBY_MODE:
+			/* I need the id of the primary as well as a connection to it */
+			log_info(_("%s Connecting to primary for cluster '%s'\n"),
+			         progname, local_options.cluster_name);
+			primaryConn = getMasterConnection(myLocalConn, local_options.node,
+			                                  local_options.cluster_name,
+		    	                              &primary_options.node, NULL);
+			if (primaryConn == NULL)
+			{
+				CloseConnections();
+				exit(ERR_BAD_CONFIG);
+			}
+
+			checkClusterConfiguration(myLocalConn,primaryConn);
+			checkNodeConfiguration(local_options.conninfo);
+
+			/*
+			 * Every 3 seconds, insert monitor info
+			 */
+			log_info(_("%s Starting continuous standby node monitoring\n"), progname);
+			for (;;)
+			{
+				MonitorExecute();
+				sleep(3);
+			}
+			break;
+		default:
+			log_err(_("%s: Unrecognized mode for node %d", progname, local_options.node));
 	}
 
 	/* Prevent a double-free */
@@ -522,8 +532,8 @@ do_failover(void)
 	}
 
 	/* start assuming this standby is the best candidate and compare with the other ones to decide */
-	if (sscanf(PQgetvalue(res2, i, 0), "%X/%X", &uxlogid, &uxrecoff) != 2)
-		log_info(_("could not parse transaction log location \"%s\"", PQgetvalue(res2, i, 0)));
+	if (sscanf(last_wal_standby_applied, "%X/%X", &uxlogid, &uxrecoff) != 2)
+		log_info(_("could not parse transaction log location \"%s\"", last_wal_standby_applied));
 
  	best_candidate.nodeId = myLocalId;
  	best_candidate.xlog_location.xlogid = uxlogid;
@@ -548,12 +558,84 @@ do_failover(void)
  
 	/* once we know who is the best candidate, promote it */
 	if (best_candidate.nodeId == myLocalId)
-	 	system(promote_command);
+	{
+		if (verbose)
+			log_info(_("%s: This node is the best candidate to be the new primary, promoting...", 
+					progname));
+	 	r = system(promote_command);
+		if (r != 0)
+		{
+			log_err(_("%s: promote command failed. You could check and try it manually.\n", progname));
+			exit(ERR_BAD_CONFIG);
+		}
+	}
 	else
-		system(follow_command);
+	{
+		if (verbose)
+			log_info(_("%s: Node %d is the best candidate to be the new primary, we should follow it...", 
+					progname, best_candidate.nodeId));
+		r = system(follow_command);
+		if (r != 0)
+		{
+			log_err(_("%s: follow command failed. You could check and try it manually.\n", progname));
+			exit(ERR_BAD_CONFIG);
+		}
+	}
 
 	/* and reconnect to the local database */
 	myLocalConn = establishDBConnection(local_options.conninfo, true);
+}
+
+
+
+/*
+ * Insert monitor info, this is basically the time and xlog replayed,
+ * applied on standby and current xlog location in primary.
+ * Also do the math to see how far are we in bytes for being uptodate
+ */
+static void
+CheckPrimaryConnection(void)
+{
+	PGresult *res;
+
+	int	connection_retries;
+
+	/*
+	 * Check if the master is still available, if after 5 minutes of retries
+	 * we cannot reconnect, shutdown
+	 */
+	for (connection_retries = 0; connection_retries < 15; connection_retries++)
+	{
+		if (PQstatus(primaryConn) != CONNECTION_OK)
+		{
+			log_err(_("\n%s: Connection to master has been lost, trying to recover...\n", progname));
+			/* wait 20 seconds between retries */
+			sleep(20);
+
+			PQreset(primaryConn);
+		}
+		else
+		{
+			log_info(_("\n%s: Connection to master has been restored.\n", progname));
+			break;
+		}
+	}
+	if (PQstatus(primaryConn) != CONNECTION_OK)
+	{
+		log_err(_("\n%s: We couldn't reconnect for long enough, exiting...\n", progname));
+		/* XXX Anything else to do here? */
+		exit(ERR_BAD_CON);
+	}
+
+	/* Send a SELECT 1 just to check if connection is OK */
+	sprintf(sqlquery, "SELECT 1");
+	res = PQexec(primaryConn, sqlquery);
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		log_err(_("PQexec failed: %s\n", PQerrorMessage(primaryConn)));
+		PQclear(res);
+		return;
+	}
 }
 
 
