@@ -447,7 +447,7 @@ do_failover(void)
 	{
 		log_err(_("PQexec failed: %s.\nReport an invalid value to not be considered as new primary and exit.\n", PQerrorMessage(myLocalConn)));
 		PQclear(res1);
-		sprintf(sqlquery, "SELECT pg_update_standby_location('%X/%X')", 0, 0);
+		sprintf(sqlquery, "SELECT repmgr_update_standby_location('%X/%X')", 0, 0);
 		/* Ignore errors, if this server has crashed other standbys won't see it anyway */
 		res1 = PQexec(myLocalConn, sqlquery);
 		PQclear(res1);
@@ -457,7 +457,7 @@ do_failover(void)
 	strncpy(last_wal_standby_applied, PQgetvalue(res1, 0, 0), MAXLEN);
 	PQclear(res1);
 
-	sprintf(sqlquery, "SELECT pg_update_standby_location('%s')", 
+	sprintf(sqlquery, "SELECT repmgr_update_standby_location('%s')", 
 				last_wal_standby_applied);
 	/* Ignore errors, if this server has crashed other standbys won't see it anyway */
 	res1 = PQexec(myLocalConn, sqlquery);
