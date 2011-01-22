@@ -82,6 +82,7 @@ static void CancelQuery(void);
 
 static void MonitorExecute(void);
 static void CheckPrimaryConnection(void);
+static void update_shared_memory(char *last_wal_standby_applied);
 static void do_failover(void);
 
 static unsigned long long int walLocationToBytes(char *wal_location);
@@ -447,22 +448,14 @@ do_failover(void)
 	{
 		log_err(_("PQexec failed: %s.\nReport an invalid value to not be considered as new primary and exit.\n", PQerrorMessage(myLocalConn)));
 		PQclear(res1);
-		sprintf(sqlquery, "SELECT repmgr_update_standby_location('%X/%X')", 0, 0);
-		/* Ignore errors, if this server has crashed other standbys won't see it anyway */
-		res1 = PQexec(myLocalConn, sqlquery);
-		PQclear(res1);
+ 		sprintf(last_wal_standby_applied, "'%X/%X'", 0, 0);
+		update_shared_memory(last_wal_standby_applied);
 		exit(ERR_DB_QUERY);
 	}
 
-	strncpy(last_wal_standby_applied, PQgetvalue(res1, 0, 0), MAXLEN);
-	PQclear(res1);
+ 	/* write last location in shared memory */
+ 	update_shared_memory(PQgetvalue(res1, 0, 0));
 
-	sprintf(sqlquery, "SELECT repmgr_update_standby_location('%s')", 
-				last_wal_standby_applied);
-	/* Ignore errors, if this server has crashed other standbys won't see it anyway */
-	res1 = PQexec(myLocalConn, sqlquery);
-	PQclear(res1);
- 
 	/* get a list of standby nodes, ignoring myself */
  	sprintf(sqlquery, "SELECT * " 
  					  "  FROM repl_nodes "
@@ -793,4 +786,23 @@ CancelQuery(void)
 		log_warning("Can't stop current query: %s\n", errbuf);
 
 	PQfreeCancel(pgcancel);
+}
+
+
+static void 
+update_shared_memory(char *last_wal_standby_applied)
+{
+	PGresult res;
+
+	sprintf(sqlquery, "SELECT repmgr_update_standby_location('%s')", 
+				last_wal_standby_applied);
+
+	/* If an error happens, just inform about that and continue */
+	res = PQexec(myLocalConn, sqlquery);
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		log_warning(_("Cannot update this standby's shared memory: %s", PQerrorMessage(myLocalConn)));
+		PQclear(res);
+		/* XXX is this enough reason to terminate this repmgrd? */
+	}
 }
