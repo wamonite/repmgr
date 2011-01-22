@@ -792,7 +792,7 @@ CancelQuery(void)
 static void 
 update_shared_memory(char *last_wal_standby_applied)
 {
-	PGresult res;
+	PGresult *res;
 
 	sprintf(sqlquery, "SELECT repmgr_update_standby_location('%s')", 
 				last_wal_standby_applied);
