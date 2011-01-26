@@ -74,7 +74,7 @@ parse_config(const char* config_file, t_configuration_options* options)
 			strncpy (options->logfacility, value, MAXLEN);
 		else if (strcmp(name, "failover") == 0)
 		{
-			char *failoverstr;
+			char failoverstr[MAXLEN];
 			strncpy(failoverstr, value, MAXLEN);
 
 			if (strcmp(failoverstr, "manual"))

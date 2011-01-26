@@ -158,15 +158,15 @@ repmgr_set_standby_location(char *locationstr)
 Datum 
 repmgr_get_last_standby_location(PG_FUNCTION_ARGS)
 {
-	char	*location;
+	char location[MAXFNAMELEN];
 
-    /* Safety check... */
-    if (!shared_state)
-        PG_RETURN_NULL();
+	/* Safety check... */
+	if (!shared_state)
+		PG_RETURN_NULL();
 
-    LWLockAcquire(shared_state->lock, LW_SHARED);
+	LWLockAcquire(shared_state->lock, LW_SHARED);
 	strncpy(location, shared_state->location, MAXFNAMELEN);
-    LWLockRelease(shared_state->lock);
+	LWLockRelease(shared_state->lock);
 
 	PG_RETURN_TEXT_P(cstring_to_text(location));
 }
