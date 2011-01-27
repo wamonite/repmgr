@@ -659,6 +659,7 @@ do_standby_clone(void)
 
 	int			r = 0;
 	int			i;
+    bool		flag_success = false;
 	bool		pg_dir = false;
 	char		master_data_directory[MAXFILENAME];
 	char		master_config_file[MAXFILENAME];
@@ -1014,6 +1015,9 @@ do_standby_clone(void)
 		goto stop_backup;
 	}
 
+	/* we success so far, flag that to allow a better HINT */
+	flag_success = true;
+
 stop_backup:
 
 	/*
@@ -1077,6 +1081,11 @@ stop_backup:
 	 * move the directory
 	 */
 	log_info(_("%s standby clone complete\n"), progname);
+
+	/*  HINT message : what to do next ? */
+	if (flag_success)
+		log_info(_("HINT: You can now start your postgresql server\nfor example : pg_ctl -D %s start\n"), dest_dir);
+
 	exit(r);
 }
 
