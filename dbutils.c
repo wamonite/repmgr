@@ -91,6 +91,36 @@ is_standby(PGconn *conn)
 }
 
 
+
+bool
+is_witness(PGconn *conn, char *cluster, int node_id)
+{
+	PGresult   *res;
+	bool		result;
+	char		sqlquery[MAXQUERY];
+
+	snprintf(sqlquery, MAXQUERY, "SELECT * from repmgr_%s.repl_nodes where id = %d",
+								 cluster, node_id);
+	res = PQexec(conn, sqlquery);
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		fprintf(stderr, "Can't query server mode: %s", PQerrorMessage(conn));
+		PQclear(res);
+		PQfinish(conn);
+		exit(1);
+	}
+
+	if (strcmp(PQgetvalue(res, 0, 3), "f") == 0)
+		result = false;
+	else
+		result = true;
+
+	PQclear(res);
+	return result;
+}
+
+
+
 /*
  * If postgreSQL version is 9 or superior returns the major version
  * if 8 or inferior returns an empty string
@@ -242,7 +272,7 @@ getMasterConnection(PGconn *standby_conn, int id, char *cluster,
 	         cluster);
 
 	sqlquery_snprintf(sqlquery, "SELECT * FROM %s.repl_nodes "
-	                  " WHERE cluster = '%s' and id <> %d",
+	                  " WHERE cluster = '%s' and id <> %d and not witness",
 	                  schema_quoted, cluster, id);
 
 	res1 = PQexec(standby_conn, sqlquery);

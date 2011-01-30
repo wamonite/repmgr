@@ -30,6 +30,7 @@
 
 #define PRIMARY_MODE		0
 #define STANDBY_MODE		1
+#define WITNESS_MODE		2
 
 #include "config.h"
 #define MAXFILENAME		1024
@@ -60,6 +61,7 @@ typedef struct
 	bool force;
 
 	char masterport[MAXLEN];
+	char localport[MAXLEN];
 
 } t_runtime_options;
 

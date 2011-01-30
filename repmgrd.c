@@ -182,7 +182,13 @@ main(int argc, char **argv)
 	 * Set my server mode, establish a connection to primary
 	 * and start monitor
 	 */
-	myLocalMode = is_standby(myLocalConn) ? STANDBY_MODE : PRIMARY_MODE;
+	if (is_standby(myLocalConn))
+		myLocalMode = STANDBY_MODE;
+	else if (is_witness(myLocalConn, myClusterName, myLocalId))
+		myLocalMode = WITNESS_MODE;
+	else /* is the master */
+		myLocalMode = PRIMARY_MODE;
+
 	switch (myLocalMode)
 	{
 		case PRIMARY_MODE:
@@ -205,6 +211,7 @@ main(int argc, char **argv)
 				sleep(3);
 			}
 			break;
+		case WITNESS_MODE:
 		case STANDBY_MODE:
 			/* I need the id of the primary as well as a connection to it */
 			log_info(_("%s Connecting to primary for cluster '%s'\n"),
@@ -696,17 +703,25 @@ checkNodeConfiguration(char *conninfo)
 
 	/*
 	 * If there isn't any results then we have not configured this node yet
-	 * in repmgr, if that is the case we will insert the node to the cluster
+	 * in repmgr, if that is the case we will insert the node to the cluster,
+	 * except if it is a witness
 	 */
 	if (PQntuples(res) == 0)
 	{
 		PQclear(res);
 
+		if (myLocalMode == WITNESS_MODE)
+		{
+			log_err(_("The witness is not configured\n"));
+			CloseConnections();
+			exit(ERR_BAD_CONFIG);
+		}
+
 		/* Adding the node */
 		log_info(_("%s Adding node %d to cluster '%s'\n"),
 		         progname, local_options.node, local_options.cluster_name);
 		sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes "
-		                  "VALUES (%d, '%s', '%s')",
+		                  "VALUES (%d, '%s', '%s', 'f')",
 		                  repmgr_schema, local_options.node,
 		                  local_options.cluster_name,
 		                  local_options.conninfo);
