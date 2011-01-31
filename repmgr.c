@@ -1017,7 +1017,10 @@ stop_backup:
 
 	/* If the rsync failed then exit */
 	if (r != 0)
+	{
+		log_err(_("Couldn't rsync the master...\nYou have to cleanup the destination directory manually !\n"));
 		exit(ERR_BAD_RSYNC);
+	}
 
 	/*
 	 * We need to create the pg_xlog sub directory too, I'm reusing a variable
