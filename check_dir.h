@@ -25,4 +25,6 @@ bool create_directory(char *dir);
 bool set_directory_permissions(char *dir);
 bool is_pg_dir(char *dir);
 
+bool create_pgdir(char *dir, bool force);
+
 #endif

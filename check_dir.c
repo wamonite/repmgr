@@ -112,7 +112,6 @@ set_directory_permissions(char *dir)
 }
 
 
-
 /* function from initdb.c */
 /* source adapted from FreeBSD /src/bin/mkdir/mkdir.c */
 
@@ -229,4 +228,66 @@ is_pg_dir(char *dir)
 	xsnprintf(path, buf_sz, "%s/PG_VERSION", dir);
 
 	return (stat(path, &sb) == 0) ? true : false;
+}
+
+
+bool
+create_pgdir(char *dir, bool force)
+{
+	bool pg_dir;
+
+	/* Check this directory could be used as a PGDATA dir */
+	switch (check_dir(dir))
+	{
+	case 0:
+		/* dir not there, must create it */
+		log_info(_("creating directory \"%s\"...\n"), dir);
+
+		if (!create_directory(dir))
+		{
+			log_err(_("couldn't create directory \"%s\"...\n"),
+					dir);
+			exit(ERR_BAD_CONFIG);
+		}
+		break;
+	case 1:
+		/* Present but empty, fix permissions and use it */
+		log_info(_("checking and correcting permissions on existing directory %s ...\n"),
+		         dir);
+
+		if (!set_directory_permissions(dir))
+		{
+			log_err(_("could not change permissions of directory \"%s\": %s\n"),
+			         dir, strerror(errno));
+			exit(ERR_BAD_CONFIG);
+		}
+		break;
+	case 2:
+		/* Present and not empty */
+		log_warning( _("directory \"%s\" exists but is not empty\n"),
+		              dir);
+
+		pg_dir = is_pg_dir(dir);
+		if (pg_dir && !force)
+		{
+			log_warning( _("\nThis looks like a PostgreSQL directory.\n"
+			               "If you are sure you want to clone here, "
+			               "please check there is no PostgreSQL server "
+			               "running and use the --force option\n"));
+			exit(ERR_BAD_CONFIG);
+		}
+		else if (pg_dir && force)
+		{
+			/* Let it continue */
+			break;
+		}
+		else
+			return false;
+	default:
+		/* Trouble accessing directory */
+		log_err( _("could not access directory \"%s\": %s\n"),
+		         dir, strerror(errno));
+		exit(ERR_BAD_CONFIG);
+	}
+	return true;
 }

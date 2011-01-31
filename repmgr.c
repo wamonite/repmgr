@@ -618,7 +618,6 @@ do_standby_clone(void)
 	int			r = 0;
 	int			i;
     bool		flag_success = false;
-	bool		pg_dir = false;
 	char		master_data_directory[MAXFILENAME];
 	char		master_config_file[MAXFILENAME];
 	char		master_hba_file[MAXFILENAME];
@@ -640,57 +639,9 @@ do_standby_clone(void)
 	}
 
 	/* Check this directory could be used as a PGDATA dir */
-	switch (check_dir(runtime_options.dest_dir))
+	if (!create_pgdir(dest_dir, runtime_options.force))
 	{
-	case 0:
-		/* dest_dir not there, must create it */
-		log_info(_("creating directory %s ...\n"), runtime_options.dest_dir);
-
-		if (!create_directory(runtime_options.dest_dir))
-		{
-			log_err(_("%s: couldn't create directory %s ...\n"),
-			        progname, runtime_options.dest_dir);
-			exit(ERR_BAD_CONFIG);
-		}
-		break;
-	case 1:
-		/* Present but empty, fix permissions and use it */
-		log_info(_("checking and correcting permissions on existing directory %s ...\n"),
-		         runtime_options.dest_dir);
-
-		if (!set_directory_permissions(runtime_options.dest_dir))
-		{
-			log_err(_("%s: could not change permissions of directory \"%s\": %s\n"),
-			        progname, runtime_options.dest_dir, strerror(errno));
-			exit(ERR_BAD_CONFIG);
-		}
-		break;
-	case 2:
-		/* Present and not empty */
-		log_warning( _("%s: directory \"%s\" exists but is not empty\n"),
-		             progname, runtime_options.dest_dir);
-
-		pg_dir = is_pg_dir(runtime_options.dest_dir);
-		if (pg_dir && !runtime_options.force)
-		{
-			log_warning( _("\nThis looks like a PostgreSQL directory.\n"
-			               "If you are sure you want to clone here, "
-			               "please check there is no PostgreSQL server "
-			               "running and use the --force option\n"));
-			exit(ERR_BAD_CONFIG);
-		}
-		else if (pg_dir && runtime_options.force)
-		{
-			/* Let it continue */
-			break;
-		}
-		else
-			return;
-	default:
-		/* Trouble accessing directory */
-		log_err( _("%s: could not access directory \"%s\": %s\n"),
-		         progname, runtime_options.dest_dir, strerror(errno));
-		exit(ERR_BAD_CONFIG);
+		return;
 	}
 
 	/* Connection parameters for master only */
@@ -701,7 +652,7 @@ do_standby_clone(void)
 
 	/* We need to connect to check configuration and start a backup */
 	log_info(_("%s connecting to master database\n"), progname);
-	conn=establishDBConnectionByParams(keywords,values,true);
+	conn = establishDBConnectionByParams(keywords,values,true);
 
 	/* primary should be v9 or better */
 	log_info(_("%s connected to master, checking its state\n"), progname);
@@ -765,49 +716,8 @@ do_standby_clone(void)
 	{
 		strncpy(tblspc_dir, PQgetvalue(res, i, 0), MAXFILENAME);
 		/* Check this directory could be used as a PGDATA dir */
-		switch (check_dir(tblspc_dir))
+		if (!create_pgdir(tblspc_dir, runtime_options.force))
 		{
-		case 0:
-			/* tblspc_dir not there, must create it */
-			log_info(_("creating directory \"%s\"... "), tblspc_dir);
-
-			if (!create_directory(tblspc_dir))
-			{
-				log_err(_("%s: couldn't create directory \"%s\"...\n"),
-				        progname, tblspc_dir);
-				PQclear(res);
-				PQfinish(conn);
-				exit(ERR_BAD_CONFIG);
-			}
-			break;
-		case 1:
-			/* Present but empty, fix permissions and use it */
-			log_info(_("fixing permissions on existing directory \"%s\"... "),
-			         tblspc_dir);
-
-			if (!set_directory_permissions(tblspc_dir))
-			{
-				log_err(_("%s: could not change permissions of directory \"%s\": %s\n"),
-				        progname, tblspc_dir, strerror(errno));
-				PQclear(res);
-				PQfinish(conn);
-				exit(ERR_BAD_CONFIG);
-			}
-			break;
-		case 2:
-			/* Present and not empty */
-			if (!runtime_options.force)
-			{
-				log_err(_("%s: directory \"%s\" exists but is not empty\n"),
-				        progname, tblspc_dir);
-				PQclear(res);
-				PQfinish(conn);
-				exit(ERR_BAD_CONFIG);
-			}
-		default:
-			/* Trouble accessing directory */
-			log_err(_("%s: could not access directory \"%s\": %s\n"),
-			        progname, tblspc_dir, strerror(errno));
 			PQclear(res);
 			PQfinish(conn);
 			exit(ERR_BAD_CONFIG);
@@ -1291,7 +1201,6 @@ do_witness_create(void)
 	FILE		*pg_conf = NULL;
 
 	int			r = 0;
-	bool		pg_dir = false;
 
 	char	master_version[MAXVERSIONSTR];
 
@@ -1322,61 +1231,9 @@ do_witness_create(void)
 	}
 
 	/* Check this directory could be used as a PGDATA dir */
-	switch (check_dir(dest_dir))
+	if (!create_pgdir(dest_dir, false))
 	{
-	case 0:
-		/* dest_dir not there, must create it */
-		if (verbose)
-			printf(_("creating directory %s ... "), dest_dir);
-		fflush(stdout);
-
-		if (!create_directory(dest_dir))
-		{
-			fprintf(stderr, _("%s: couldn't create directory %s ... "),
-			        progname, dest_dir);
-			return;
-		}
-		break;
-	case 1:
-		/* Present but empty, fix permissions and use it */
-		if (verbose)
-			printf(_("fixing permissions on existing directory %s ... "),
-			       dest_dir);
-		fflush(stdout);
-
-		if (!set_directory_permissions(dest_dir))
-		{
-			fprintf(stderr, _("%s: could not change permissions of directory \"%s\": %s\n"),
-			        progname, dest_dir, strerror(errno));
-			return;
-		}
-		break;
-	case 2:
-		/* Present and not empty */
-		fprintf(stderr,
-		        _("%s: directory \"%s\" exists but is not empty\n"),
-		        progname, dest_dir);
-
-		pg_dir = is_pg_dir(dest_dir);
-		if (pg_dir && !force)
-		{
-			fprintf(stderr, _("\nThis looks like a PostgreSQL directory.\n"
-			                  "If you are sure you want to clone here, "
-			                  "please check there is no PostgreSQL server "
-			                  "running and use the --force option\n"));
-			return;
-		}
-		else if (pg_dir && force)
-		{
-			/* Let it continue */
-			break;
-		}
-		else
-			return;
-	default:
-		/* Trouble accessing directory */
-		fprintf(stderr, _("%s: could not access directory \"%s\": %s\n"),
-		        progname, dest_dir, strerror(errno));
+		return;
 	}
 
 	/* Connection parameters for master only */
@@ -1805,121 +1662,68 @@ create_schema(PGconn *conn, char *myClusterName)
 {
 	char 		sqlquery[QUERY_STR_LEN];
 
-	sprintf(sqlquery, "CREATE SCHEMA repmgr_%s", myClusterName);
+	sqlquery_snprintf(sqlquery, "CREATE SCHEMA %s", repmgr_schema);
+	log_debug("master register: %s\n", sqlquery);
 	if (!PQexec(conn, sqlquery))
 	{
-		fprintf(stderr, "Cannot create the schema repmgr_%s: %s\n",
-		        myClusterName, PQerrorMessage(conn));
-		return false;
+		log_err(_("Cannot create the schema %s: %s\n"),
+		        repmgr_schema, PQerrorMessage(conn));
+		PQfinish(conn);
+		exit(ERR_BAD_CONFIG);
 	}
 
 	/* ... the tables */
-	sprintf(sqlquery, "CREATE TABLE repmgr_%s.repl_nodes (        "
-			"  id        integer primary key, "
-			"  cluster   text    not null,    "
-			"  conninfo  text    not null,"
-			"  witness   boolean not null default false)", myClusterName);
+	sqlquery_snprintf(sqlquery, "CREATE TABLE %s.repl_nodes (        "
+	                  "  id        integer primary key, "
+	                  "  cluster   text    not null,    "
+	                  "  conninfo  text    not null,    " 
+					  "  witness   boolean not null default false)", repmgr_schema);
+	log_debug("master register: %s\n", sqlquery);
 	if (!PQexec(conn, sqlquery))
 	{
-		fprintf(stderr, "Cannot create the table repmgr_%s.repl_nodes: %s\n",
-		        myClusterName, PQerrorMessage(conn));
-		return false;
+		log_err(_("Cannot create the table %s.repl_nodes: %s\n"),
+		        repmgr_schema, PQerrorMessage(conn));
+		PQfinish(conn);
+		exit(ERR_BAD_CONFIG);
 	}
 
-	sprintf(sqlquery, "CREATE TABLE repmgr_%s.repl_monitor ( "
-	        "  primary_node                   INTEGER NOT NULL, "
-	        "  standby_node                   INTEGER NOT NULL, "
-	        "  last_monitor_time              TIMESTAMP WITH TIME ZONE NOT NULL, "
-	        "  last_wal_primary_location      TEXT NOT NULL,   "
-	        "  last_wal_standby_location      TEXT         ,   "
-	        "  replication_lag                BIGINT NOT NULL, "
-	        "  apply_lag                      BIGINT NOT NULL) ", myClusterName);
+	sqlquery_snprintf(sqlquery, "CREATE TABLE %s.repl_monitor ( "
+	                  "  primary_node                   INTEGER NOT NULL, "
+	                  "  standby_node                   INTEGER NOT NULL, "
+	                  "  last_monitor_time              TIMESTAMP WITH TIME ZONE NOT NULL, "
+	                  "  last_wal_primary_location      TEXT NOT NULL,   "
+	                  "  last_wal_standby_location      TEXT NOT NULL,   "
+	                  "  replication_lag                BIGINT NOT NULL, "
+	                  "  apply_lag                      BIGINT NOT NULL) ", repmgr_schema);
+	log_debug("master register: %s\n", sqlquery);
 	if (!PQexec(conn, sqlquery))
 	{
-		fprintf(stderr, "Cannot create the table repmgr_%s.repl_monitor: %s\n",
-		        myClusterName, PQerrorMessage(conn));
-		return false;
+		log_err(_("Cannot create the table %s.repl_monitor: %s\n"),
+		        repmgr_schema, PQerrorMessage(conn));
+		PQfinish(conn);
+		exit(ERR_BAD_CONFIG);
 	}
 
 	/* and the view */
-	sprintf(sqlquery, "CREATE VIEW repmgr_%s.repl_status AS "
-	        "  WITH monitor_info AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY primary_node, standby_node "
-	        " ORDER BY last_monitor_time desc) "
-	        "  FROM repmgr_%s.repl_monitor) "
-	        "  SELECT primary_node, standby_node, last_monitor_time, last_wal_primary_location, "
-	        "         last_wal_standby_location, pg_size_pretty(replication_lag) replication_lag, "
-	        "         pg_size_pretty(apply_lag) apply_lag, age(now(), last_monitor_time) AS time_lag "
-	        "    FROM monitor_info a "
-	        "   WHERE row_number = 1", myClusterName, myClusterName);
+	sqlquery_snprintf(sqlquery, "CREATE VIEW %s.repl_status AS "
+	                  "  WITH monitor_info AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY primary_node, standby_node "
+	                  " ORDER BY last_monitor_time desc) "
+	                  "  FROM %s.repl_monitor) "
+	                  "  SELECT primary_node, standby_node, last_monitor_time, last_wal_primary_location, "
+	                  "         last_wal_standby_location, pg_size_pretty(replication_lag) replication_lag, "
+	                  "         pg_size_pretty(apply_lag) apply_lag, age(now(), last_monitor_time) AS time_lag "
+	                  "    FROM monitor_info a "
+	                  "   WHERE row_number = 1", repmgr_schema, repmgr_schema);
+	log_debug("master register: %s\n", sqlquery);
 	if (!PQexec(conn, sqlquery))
 	{
-		fprintf(stderr, "Cannot create the view repmgr_%s.repl_status: %s\n",
-		        myClusterName, PQerrorMessage(conn));
-		return false;
+		log_err(_("Cannot create the view %s.repl_status: %s\n"),
+		        repmgr_schema, PQerrorMessage(conn));
+		PQfinish(conn);
+		exit(ERR_BAD_CONFIG);
 	}
 
 	return true;
-
-
-		sqlquery_snprintf(sqlquery, "CREATE SCHEMA %s", repmgr_schema);
-		log_debug("master register: %s\n", sqlquery);
-		if (!PQexec(conn, sqlquery))
-		{
-			log_err(_("Cannot create the schema %s: %s\n"),
-			        repmgr_schema, PQerrorMessage(conn));
-			PQfinish(conn);
-			exit(ERR_BAD_CONFIG);
-		}
-
-		/* ... the tables */
-		sqlquery_snprintf(sqlquery, "CREATE TABLE %s.repl_nodes (        "
-		                  "  id        integer primary key, "
-		                  "  cluster   text    not null,    "
-		                  "  conninfo  text    not null)", repmgr_schema);
-		log_debug("master register: %s\n", sqlquery);
-		if (!PQexec(conn, sqlquery))
-		{
-			log_err(_("Cannot create the table %s.repl_nodes: %s\n"),
-			        repmgr_schema, PQerrorMessage(conn));
-			PQfinish(conn);
-			exit(ERR_BAD_CONFIG);
-		}
-
-		sqlquery_snprintf(sqlquery, "CREATE TABLE %s.repl_monitor ( "
-		                  "  primary_node                   INTEGER NOT NULL, "
-		                  "  standby_node                   INTEGER NOT NULL, "
-		                  "  last_monitor_time              TIMESTAMP WITH TIME ZONE NOT NULL, "
-		                  "  last_wal_primary_location      TEXT NOT NULL,   "
-		                  "  last_wal_standby_location      TEXT NOT NULL,   "
-		                  "  replication_lag                BIGINT NOT NULL, "
-		                  "  apply_lag                      BIGINT NOT NULL) ", repmgr_schema);
-		log_debug("master register: %s\n", sqlquery);
-		if (!PQexec(conn, sqlquery))
-		{
-			log_err(_("Cannot create the table %s.repl_monitor: %s\n"),
-			        repmgr_schema, PQerrorMessage(conn));
-			PQfinish(conn);
-			exit(ERR_BAD_CONFIG);
-		}
-
-		/* and the view */
-		sqlquery_snprintf(sqlquery, "CREATE VIEW %s.repl_status AS "
-		                  "  WITH monitor_info AS (SELECT *, ROW_NUMBER() OVER (PARTITION BY primary_node, standby_node "
-		                  " ORDER BY last_monitor_time desc) "
-		                  "  FROM %s.repl_monitor) "
-		                  "  SELECT primary_node, standby_node, last_monitor_time, last_wal_primary_location, "
-		                  "         last_wal_standby_location, pg_size_pretty(replication_lag) replication_lag, "
-		                  "         pg_size_pretty(apply_lag) apply_lag, age(now(), last_monitor_time) AS time_lag "
-		                  "    FROM monitor_info a "
-		                  "   WHERE row_number = 1", repmgr_schema, repmgr_schema);
-		log_debug("master register: %s\n", sqlquery);
-		if (!PQexec(conn, sqlquery))
-		{
-			log_err(_("Cannot create the view %s.repl_status: %s\n"),
-			        repmgr_schema, PQerrorMessage(conn));
-			PQfinish(conn);
-			exit(ERR_BAD_CONFIG);
-		}
 }
 
 
