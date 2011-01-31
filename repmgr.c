@@ -639,7 +639,7 @@ do_standby_clone(void)
 	}
 
 	/* Check this directory could be used as a PGDATA dir */
-	if (!create_pgdir(dest_dir, runtime_options.force))
+	if (!create_pgdir(runtime_options.dest_dir, runtime_options.force))
 	{
 		return;
 	}
@@ -752,6 +752,45 @@ do_standby_clone(void)
 			strncpy(master_ident_file, PQgetvalue(res, i, 1), MAXFILENAME);
 		else
 			log_warning(_("unknown parameter: %s\n"), PQgetvalue(res, i, 0));
+	}
+	PQclear(res);
+	
+	/* if dest_dir hasn't been provided, guess it from master */
+	if (dest_dir == NULL)
+	{
+		dest_dir = malloc(sizeof(master_data_directory));
+		strcpy(dest_dir, master_data_directory);
+	}
+	/* Check this directory could be used as a PGDATA dir */
+	if (!create_pgdir(dest_dir))
+	{
+		PQfinish(conn);
+		return;
+	}
+
+
+	/* Check if the tablespace locations exists and that we can write to them */
+	sprintf(sqlquery, "select spclocation from pg_tablespace where spcname not in ('pg_default', 'pg_global')");
+	res = PQexec(conn, sqlquery);
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		fprintf(stderr, "Can't get info about tablespaces: %s\n", PQerrorMessage(conn));
+		PQclear(res);
+		PQfinish(conn);
+		return;
+	}
+	for (i = 0; i < PQntuples(res); i++)
+	{
+		char *tblspc_dir = NULL;
+
+		tblspc_dir = PQgetvalue(res, i, 0);
+		/* Check this directory could be used as a PGDATA dir */
+		if (!create_pgdir(tblspc_dir))
+		{
+			PQclear(res);
+			PQfinish(conn);
+			return;
+		}
 	}
 	PQclear(res);
 
@@ -928,7 +967,8 @@ stop_backup:
 	/* If the rsync failed then exit */
 	if (r != 0)
 	{
-		log_err(_("Couldn't rsync the master...\nYou have to cleanup the destination directory manually !\n"));
+		log_err(_("Couldn't rsync the master...\nYou have to cleanup the destination directory (%s) manually!\n"), 
+				 runtime_options.dest_dir);
 		exit(ERR_BAD_RSYNC);
 	}
 
