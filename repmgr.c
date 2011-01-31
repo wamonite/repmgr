@@ -731,7 +731,7 @@ do_standby_clone(void)
 	if (!guc_setted(conn, "wal_keep_segments", ">=", runtime_options.wal_keep_segments))
 	{
 		PQfinish(conn);
-		log_err(_("%s needs parameter 'wal_keep_segments' to be set to %s or greater (see the '-w' option)\n"), progname, runtime_options.wal_keep_segments);
+		log_err(_("%s needs parameter 'wal_keep_segments' to be set to %s or greater (see the '-w' option or edit the postgresql.conf of the PostgreSQL master.)\n"), progname, runtime_options.wal_keep_segments);
 		exit(ERR_BAD_CONFIG);
 	}
 	if (!guc_setted(conn, "archive_mode", "=", "on"))
@@ -1357,7 +1357,7 @@ do_witness_create(void)
 		pg_dir = is_pg_dir(dest_dir);
 		if (pg_dir && !force)
 		{
-			fprintf(stderr, _("\nThis looks like a PostgreSQL directroy.\n"
+			fprintf(stderr, _("\nThis looks like a PostgreSQL directory.\n"
 			                  "If you are sure you want to clone here, "
 			                  "please check there is no PostgreSQL server "
 			                  "running and use the --force option\n"));
