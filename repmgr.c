@@ -754,7 +754,7 @@ do_standby_clone(void)
 			log_warning(_("unknown parameter: %s\n"), PQgetvalue(res, i, 0));
 	}
 	PQclear(res);
-	
+
 	/* if dest_dir hasn't been provided, guess it from master */
 	if (dest_dir == NULL)
 	{
