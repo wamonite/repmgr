@@ -764,7 +764,7 @@ do_standby_clone(void)
 		flag_autoguess = true;
 	}
 	/* Check this directory could be used as a PGDATA dir */
-	if (!create_pgdir(dest_dir))
+	if (!create_pgdir(dest_dir, force))
 	{
 		PQfinish(conn);
 		return;
@@ -787,7 +787,7 @@ do_standby_clone(void)
 
 		tblspc_dir = PQgetvalue(res, i, 0);
 		/* Check this directory could be used as a PGDATA dir */
-		if (!create_pgdir(tblspc_dir))
+		if (!create_pgdir(tblspc_dir, force))
 		{
 			PQclear(res);
 			PQfinish(conn);
@@ -899,6 +899,24 @@ do_standby_clone(void)
 	}
 
 	log_info("standby clone: master config file '%s'\n", master_config_file);
+	/* need to create the global sub directory */
+	sprintf(master_control_file, "%s/global/pg_control", master_data_directory);
+	sprintf(local_control_file, "%s/global", dest_dir);
+	if (!create_directory(local_control_file))
+	{
+		fprintf(stderr, _("%s: couldn't create directory %s ... "),
+		        progname, dest_dir);
+		goto stop_backup;
+	}
+
+	r = copy_remote_files(host, remote_user, master_control_file, local_control_file, false);
+	if (r != 0)
+		goto stop_backup;
+
+	r = copy_remote_files(host, remote_user, master_data_directory, dest_dir, true);
+	if (r != 0)
+		goto stop_backup;
+
 	if (flag_autoguess)
 		r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
 	                      master_config_file, master_config_file, false);
@@ -1290,7 +1308,7 @@ do_witness_create(void)
 	}
 
 	/* Check this directory could be used as a PGDATA dir */
-	if (!create_pgdir(dest_dir, false))
+	if (!create_pgdir(dest_dir, runtime_options.force))
 	{
 		return;
 	}

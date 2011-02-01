@@ -221,20 +221,28 @@ mkdir_p(char *path, mode_t omode)
 bool
 is_pg_dir(char *dir)
 {
-	const size_t buf_sz = 8192;
-	char		 path[buf_sz];
-	struct stat	 sb;
+	char	path_c[8192];
+	int		r;
 
-	xsnprintf(path, buf_sz, "%s/PG_VERSION", dir);
+	// test pgdata
+	sprintf(path_c, "%s/PG_VERSION", dir);
+	if (stat(path_c, &sb) == 0)
+		return true;
 
-	return (stat(path, &sb) == 0) ? true : false;
+	// test tablespace dir
+	sprintf(path_c, "ls %s/PG_9.0_*/ -I*", dir);
+	r = system(path_c);
+	if (r == 0)
+		return true;
+
+	return false;
 }
 
 
 bool
 create_pgdir(char *dir, bool force)
 {
-	bool pg_dir;
+	bool	pg_dir = false;
 
 	/* Check this directory could be used as a PGDATA dir */
 	switch (check_dir(dir))
@@ -268,7 +276,17 @@ create_pgdir(char *dir, bool force)
 		              dir);
 
 		pg_dir = is_pg_dir(dir);
-		if (pg_dir && !force)
+
+		/*
+		 * we use force to reduce the time needed to restore a node which
+		 * turn async after a failover or anything else
+		 */
+		if (pg_dir && force)
+		{
+			/* Let it continue */
+			break;
+		}
+		else if (pg_dir && !force)
 		{
 			log_warning( _("\nThis looks like a PostgreSQL directory.\n"
 			               "If you are sure you want to clone here, "
@@ -276,13 +294,8 @@ create_pgdir(char *dir, bool force)
 			               "running and use the --force option\n"));
 			exit(ERR_BAD_CONFIG);
 		}
-		else if (pg_dir && force)
-		{
-			/* Let it continue */
-			break;
-		}
-		else
-			return false;
+
+		return false;
 	default:
 		/* Trouble accessing directory */
 		log_err( _("could not access directory \"%s\": %s\n"),
