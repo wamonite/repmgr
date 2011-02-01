@@ -1249,6 +1249,7 @@ do_witness_create(void)
 {
 	PGconn 		*masterconn;
 	PGconn 		*witnessconn;
+	PGresult	*res;
 	char 		sqlquery[QUERY_STR_LEN];
 
 	char		script[MAXLEN];
@@ -1256,12 +1257,15 @@ do_witness_create(void)
 	FILE		*pg_conf = NULL;
 
 	int			r = 0;
+	int			i;
 
 	char	master_version[MAXVERSIONSTR];
 
 	char    	myClusterName[MAXLEN];
+	char    	createcommand[MAXLEN];
 	int     	myLocalId   = -1;
 	char 		conninfo[MAXLEN];
+	char		master_hba_file[MAXLEN];
 	/* these are no used here, but they can be in the repmgr.conf */
 	int			failover;
 	char		promote_command[MAXLEN];
@@ -1358,20 +1362,52 @@ do_witness_create(void)
 	snprintf(buf, sizeof(buf), "\n#Configuration added by %s\n", progname);
 	fputs(buf, pg_conf);
 
-	snprintf(buf, sizeof(buf), "port = %s\n", ((localport==NULL) ? "5499" : localport));
+	localport=(localport==NULL) ? "5499" : localport;
+	snprintf(buf, sizeof(buf), "port = %s\n", localport);
 	fputs(buf, pg_conf);
 
 	snprintf(buf, sizeof(buf), "shared_preload_libraries = 'repmgr_funcs'\n") ;
 	fputs(buf, pg_conf);
+	
+	snprintf(buf, sizeof(buf), "listen_addresses = '*'\n") ;
+	fputs(buf, pg_conf);
 
 	fclose(pg_conf);
+
+	/* Get the pg_hba.conf full path */
+	sprintf(sqlquery, "SELECT name, setting "
+	        "  FROM pg_settings "
+	        " WHERE name IN ('hba_file')");
+	res = PQexec(masterconn, sqlquery);
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		fprintf(stderr, "Can't get info about pg_hba.conf: %s\n", PQerrorMessage(masterconn));
+		PQclear(res);
+		PQfinish(masterconn);
+		return;
+	}
+	for (i = 0; i < PQntuples(res); i++)
+	{
+		if (strcmp(PQgetvalue(res, i, 0), "hba_file") == 0)
+			strcpy(master_hba_file, PQgetvalue(res, i, 1));
+		else
+			fprintf(stderr, _("uknown parameter: %s"), PQgetvalue(res, i, 0));
+	}
+	PQclear(res);
+	
+	r = copy_remote_files(host, remote_user, master_hba_file, dest_dir, false);
+	if (r != 0)
+	{
+		fprintf(stderr, "[ERROR]: Can't rsync the pg_hba.conf file from master\n");
+		return;
+	}
 
 	/* start new instance */
 	sprintf(script, "pg_ctl -D %s start", dest_dir);
 	r = system(script);
 	if (r != 0)
 	{
-		fprintf(stderr, "Can't start cluster for witness server\n");
+		fprintf(stderr, "[ERROR]: Can't start cluster for witness server\n");
 		return;
 	}
 
@@ -1390,6 +1426,30 @@ do_witness_create(void)
 
 	/* Let the server start */
 	sleep(2);
+	/*
+		create the local user and local db if it is not the default one
+		values[2] is the username we use to connect to master,
+		values[3] is the dbname we use to connect to master,
+		we suppose it is the same in the repmgr.conf (obviously it is preferable)
+		FIXME this is fragile and its a temporary solution
+	*/
+	if (!(strcmp(getenv("USER"), values[2]) == 0))
+	{
+		sprintf(createcommand, "createuser -p %s -s %s", localport, values[2]);
+		r = system(createcommand);
+		if (r != 0)
+		{
+			fprintf(stderr, "Can't create local user\n");
+			return;
+		}
+		sprintf(createcommand, "createdb -p %s -O %s %s", localport, values[2], values[3]);
+		r = system(createcommand);
+		if (r != 0)
+		{
+			fprintf(stderr, "Can't create local db\n");
+			return;
+		}
+	}
 	/* establish a connection to the witness, and create the schema */
 	witnessconn = establishDBConnection(conninfo, true);
 
