@@ -618,6 +618,7 @@ do_standby_clone(void)
 	int			r = 0;
 	int			i;
     bool		flag_success = false;
+	bool		flag_autoguess = false;
 	char		master_data_directory[MAXFILENAME];
 	char		master_config_file[MAXFILENAME];
 	char		master_hba_file[MAXFILENAME];
@@ -760,6 +761,7 @@ do_standby_clone(void)
 	{
 		dest_dir = malloc(sizeof(master_data_directory));
 		strcpy(dest_dir, master_data_directory);
+		flag_autoguess = true;
 	}
 	/* Check this directory could be used as a PGDATA dir */
 	if (!create_pgdir(dest_dir))
@@ -897,8 +899,13 @@ do_standby_clone(void)
 	}
 
 	log_info("standby clone: master config file '%s'\n", master_config_file);
-	r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
+	if (flag_autoguess)
+		r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
+	                      master_config_file, master_config_file, false);
+	else
+		r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
 	                      master_config_file, runtime_options.dest_dir, false);
+
 	if (r != 0)
 	{
 		log_warning("standby clone: failed copying master config file '%s'\n", master_config_file);
@@ -906,7 +913,11 @@ do_standby_clone(void)
 	}
 
 	log_info("standby clone: master hba file '%s'\n", master_hba_file);
-	r = copy_remote_files(runtime_options.host, runtime_options.remote_user, master_hba_file, runtime_options.dest_dir, false);
+	if (flag_autoguess)
+		r = copy_remote_files(runtime_options.host, runtime_options.remote_user, master_hba_file, master_hba_file, false);
+	else
+		r = copy_remote_files(runtime_options.host, runtime_options.remote_user, master_hba_file, runtime_options.dest_dir, false);
+
 	if (r != 0)
 	{
 		log_warning("standby clone: failed copying master hba file '%s'\n", master_hba_file);
@@ -914,8 +925,12 @@ do_standby_clone(void)
 	}
 
 	log_info("standby clone: master ident file '%s'\n", master_ident_file);
-	r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
-	                      master_ident_file, runtime_options.dest_dir, false);
+	if (flag_autoguess)
+		r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
+	    	                  master_ident_file, master_ident_file, false);
+	else
+		r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
+	    	                  master_ident_file, runtime_options.dest_dir, false);
 	if (r != 0)
 	{
 		log_warning("standby clone: failed copying master ident file '%s'\n", master_ident_file);
@@ -995,7 +1010,7 @@ stop_backup:
 
 	/*  HINT message : what to do next ? */
 	if (flag_success)
-		log_info(_("HINT: You can now start your postgresql server\nfor example : pg_ctl -D %s start\n"), dest_dir);
+		log_info(_("HINT: You can now start your postgresql server\nfor example : pg_ctl -D %s start\n"), runtime_options.dest_dir);
 
 	exit(r);
 }
@@ -1304,7 +1319,7 @@ do_witness_create(void)
 	if (is_standby(masterconn))
 	{
 		PQfinish(masterconn);
-		fprintf(stderr, "\nThe command should not run on a standby node\n");
+		fprintf(stderr, "The command should not run on a standby node\n");
 		return;
 	}
 
@@ -1346,6 +1361,9 @@ do_witness_create(void)
 	snprintf(buf, sizeof(buf), "port = %s\n", ((localport==NULL) ? "5499" : localport));
 	fputs(buf, pg_conf);
 
+	snprintf(buf, sizeof(buf), "shared_preload_libraries = 'repmgr_funcs'\n") ;
+	fputs(buf, pg_conf);
+
 	fclose(pg_conf);
 
 	/* start new instance */
@@ -1370,6 +1388,8 @@ do_witness_create(void)
 		return;
 	}
 
+	/* Let the server start */
+	sleep(2);
 	/* establish a connection to the witness, and create the schema */
 	witnessconn = establishDBConnection(conninfo, true);
 
@@ -1391,7 +1411,7 @@ do_witness_create(void)
 		return;
 	}
 
-	fprintf(stderr, "Configuration has been succesfully copied to the witness");
+	log_notice(_("Configuration has been succesfully copied to the witness\n"));
 }
 
 static void
@@ -1795,7 +1815,7 @@ copy_configuration(PGconn *masterconn, PGconn *witnessconn, char *myClusterName)
 	for (i = 0; i < PQntuples(res); i++)
 	{
 		sprintf(sqlquery, "INSERT INTO repmgr_%s.repl_nodes(id, cluster, conninfo, witness) "
-						  "VALUES (%d, '%s', '%s', %s)",
+						  "VALUES (%d, '%s', '%s', '%s')",
 								myClusterName, atoi(PQgetvalue(res, i, 0)), 
 								myClusterName, PQgetvalue(res, i, 2), 
 								PQgetvalue(res, i, 3));
