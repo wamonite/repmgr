@@ -824,6 +824,6 @@ update_shared_memory(char *last_wal_standby_applied)
 	{
 		log_warning(_("Cannot update this standby's shared memory: %s", PQerrorMessage(myLocalConn)));
 		/* XXX is this enough reason to terminate this repmgrd? */
-	} // TODO memory leak here ?
+	}
 	PQclear(res);
 }
