@@ -99,7 +99,7 @@ is_witness(PGconn *conn, char *cluster, int node_id)
 	bool		result;
 	char		sqlquery[MAXQUERY];
 
-	snprintf(sqlquery, MAXQUERY, "SELECT * from repmgr_%s.repl_nodes where id = %d",
+	snprintf(sqlquery, MAXQUERY, "SELECT witness from repmgr_%s.repl_nodes where id = %d",
 								 cluster, node_id);
 	res = PQexec(conn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
@@ -110,7 +110,7 @@ is_witness(PGconn *conn, char *cluster, int node_id)
 		exit(1);
 	}
 
-	if (strcmp(PQgetvalue(res, 0, 3), "f") == 0)
+	if (strcmp(PQgetvalue(res, 0, 0), "f") == 0)
 		result = false;
 	else
 		result = true;

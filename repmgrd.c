@@ -182,10 +182,10 @@ main(int argc, char **argv)
 	 * Set my server mode, establish a connection to primary
 	 * and start monitor
 	 */
-	if (is_standby(myLocalConn))
-		myLocalMode = STANDBY_MODE;
-	else if (is_witness(myLocalConn, myClusterName, myLocalId))
+	if (is_witness(myLocalConn, myClusterName, myLocalId))
 		myLocalMode = WITNESS_MODE;
+	else if (is_standby(myLocalConn))
+		myLocalMode = STANDBY_MODE;
 	else /* is the master */
 		myLocalMode = PRIMARY_MODE;
 
@@ -642,6 +642,7 @@ CheckPrimaryConnection(void)
 		PQclear(res);
 		return;
 	}
+	PQclear(res);
 }
 
 
@@ -822,7 +823,7 @@ update_shared_memory(char *last_wal_standby_applied)
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
 		log_warning(_("Cannot update this standby's shared memory: %s", PQerrorMessage(myLocalConn)));
-		PQclear(res);
 		/* XXX is this enough reason to terminate this repmgrd? */
-	}
+	} // TODO memory leak here ?
+	PQclear(res);
 }
