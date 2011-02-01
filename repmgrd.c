@@ -300,7 +300,7 @@ MonitorExecute(void)
 		}
 		else
 		{
-			fprintf(stderr, ".", progname);
+			fprintf(stderr, ".");
 			break;
 		}
 	}
