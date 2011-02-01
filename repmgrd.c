@@ -284,18 +284,23 @@ MonitorExecute(void)
 	{
 		if (PQstatus(primaryConn) != CONNECTION_OK)
 		{
-			log_warning(_("Connection to master has been lost, trying to recover...\n"));
+			log_warning(_("Connection to master has been lost, trying to recover... %i seconds before failover\n", (20*(15-connection_retries))));
 			/* wait 20 seconds between retries */
-			sleep(20);
+			sleep(2);
 
 			PQreset(primaryConn);
 		}
-		else
+		else if (verbose)
 		{
 			if (connection_retries > 0)
 			{
 				log_notice(_("Connection to master has been restored, continue monitoring.\n"));
 			}
+			break;
+		}
+		else
+		{
+			fprintf(stderr, ".", progname);
 			break;
 		}
 	}
