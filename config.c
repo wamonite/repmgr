@@ -77,10 +77,10 @@ parse_config(const char* config_file, t_configuration_options* options)
 			char failoverstr[MAXLEN];
 			strncpy(failoverstr, value, MAXLEN);
 
-			if (strcmp(failoverstr, "manual"))
-				options->failover = MANUAL_FAILOVER;
-			else if (strcmp(failoverstr, "automatic"))
-				options->failover = AUTOMATIC_FAILOVER;
+			if (strcmp(failoverstr, "manual") == 0)
+				*failover = MANUAL_FAILOVER;
+			else if (strcmp(failoverstr, "automatic") == 0)
+				*failover = AUTOMATIC_FAILOVER;
 			else
 			{
 				printf ("WARNING: value for failover option is incorrect, it should be automatic or manual. Defaulting to manual.\n");
