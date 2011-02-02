@@ -444,14 +444,14 @@ do_failover(void)
     unsigned int uxrecoff;
 	char last_wal_standby_applied[MAXLEN];
 
- 	PGconn	*nodeConn;
+	PGconn	*nodeConn;
 
  	/* 
      * will get info about until 50 nodes, 
      * which seems to be large enough for most scenarios
      */
- 	nodeInfo nodes[50];
- 	nodeInfo best_candidate;
+	nodeInfo nodes[50];
+	nodeInfo best_candidate;
  
 	/* first we get info about this node, and update shared memory */
 	sprintf(sqlquery, "SELECT pg_last_xlog_replay_location()");
@@ -460,20 +460,20 @@ do_failover(void)
 	{
 		log_err(_("PQexec failed: %s.\nReport an invalid value to not be considered as new primary and exit.\n", PQerrorMessage(myLocalConn)));
 		PQclear(res1);
- 		sprintf(last_wal_standby_applied, "'%X/%X'", 0, 0);
+		sprintf(last_wal_standby_applied, "'%X/%X'", 0, 0);
 		update_shared_memory(last_wal_standby_applied);
 		exit(ERR_DB_QUERY);
 	}
 
- 	/* write last location in shared memory */
- 	update_shared_memory(PQgetvalue(res1, 0, 0));
+	/* write last location in shared memory */
+	update_shared_memory(PQgetvalue(res1, 0, 0));
 
 	/* get a list of standby nodes, ignoring myself */
- 	sprintf(sqlquery, "SELECT * " 
- 					  "  FROM repl_nodes "
-  					  " WHERE id IN (SELECT standby_node FROM repl_status WHERE standby_node <> %d) "
-					  "   AND cluster = '%s' ",
- 					  myLocalId, myClusterName);
+	sprintf(sqlquery, "SELECT * "
+						"  FROM repmgr_%s.repl_nodes "
+						" WHERE id IN (SELECT standby_node FROM repmgr_%s.repl_status WHERE standby_node <> %d) "
+						"   AND cluster = '%s' ",
+					myClusterName, myClusterName, myLocalId, myClusterName);
  
      res1 = PQexec(myLocalConn, sqlquery);
      if (PQresultStatus(res1) != PGRES_TUPLES_OK)
@@ -514,7 +514,7 @@ do_failover(void)
  		nodes[i].nodeId = node;
  		nodes[i].xlog_location.xlogid = uxlogid;
  		nodes[i].xlog_location.xrecoff = uxrecoff;
- 		nodes[i].is_ready = true;
+		nodes[i].is_ready = true;
  
 		PQclear(res2);
 		PQfinish(nodeConn);
@@ -546,9 +546,9 @@ do_failover(void)
  	best_candidate.xlog_location.xrecoff = uxrecoff;
  	best_candidate.is_ready = true;
  
- 	/* determine which one is the best candidate to promote to primary */
- 	for (i = 0; i <= numelm; i++)
- 	{
+	/* determine which one is the best candidate to promote to primary */
+	for (i = 0; i <= numelm; i++)
+	{
 		if (!nodes[i].is_ready)
 			continue;
 
