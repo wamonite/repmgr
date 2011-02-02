@@ -1114,6 +1114,7 @@ do_standby_promote(void)
 	 */
 	log_notice(_("%s: restarting server using pg_ctl\n"), progname);
 	maxlen_snprintf(script, "pg_ctl -D %s -w -m fast restart", data_dir);
+
 	r = system(script);
 	if (r != 0)
 	{
