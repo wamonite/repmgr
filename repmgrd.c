@@ -80,7 +80,8 @@ static void checkClusterConfiguration(PGconn *conn, PGconn *primary);
 static void checkNodeConfiguration(char *conninfo);
 static void CancelQuery(void);
 
-static void MonitorExecute(void);
+static void StandbyMonitor(void);
+static void WitnessMonitor(void);
 static bool CheckPrimaryConnection(void);
 static void update_shared_memory(char *last_wal_standby_applied);
 static void do_failover(void);
@@ -201,6 +202,11 @@ main(int argc, char **argv)
 
 			log_info(_("%s Starting continuous primary connection check\n"), progname);
 			/* Check that primary is still alive, and standbies are sending info */
+			/*
+			 * Every SLEEP_MONITOR seconds, do master checks
+			 * XXX
+			 * Check that standbies are sending info
+			*/
 			for (;;)
 			{
 				if (CheckPrimaryConnection())
@@ -209,15 +215,43 @@ main(int argc, char **argv)
 					CheckActiveStandbiesConnections();
 					CheckInactiveStandbies();
 */
-					sleep(3);
+					sleep(SLEEP_MONITOR);
 				}
 				else
 				{
+					/* XXX
+					 * May we do something more verbose ?
+					 */
 					exit (1);
 				}
 			}
 			break;
 		case WITNESS_MODE:
+			/* I need the id of the primary as well as a connection to it */
+			log_info(_("%s Connecting to primary for cluster '%s'\n"),
+			         progname, local_options.cluster_name);
+			primaryConn = getMasterConnection(myLocalConn, local_options.node, 
+											  local_options.cluster_name, 
+											  &primary_options.node, NULL);
+			if (primaryConn == NULL)
+			{
+				CloseConnections();
+				exit(ERR_BAD_CONFIG);
+			}
+
+			checkClusterConfiguration(myLocalConn, primaryConn);
+			checkNodeConfiguration(local_options.conninfo);
+
+			/*
+			 * Every SLEEP_MONITOR seconds, do witness checks
+			 */
+			log_info(_("%s Starting continuous witness node monitoring\n"), progname);
+			for (;;)
+			{
+				WitnessMonitor();
+				sleep(SLEEP_MONITOR);
+			}
+			break;
 		case STANDBY_MODE:
 			/* I need the id of the primary as well as a connection to it */
 			log_info(_("%s Connecting to primary for cluster '%s'\n"),
@@ -231,17 +265,17 @@ main(int argc, char **argv)
 				exit(ERR_BAD_CONFIG);
 			}
 
-			checkClusterConfiguration(myLocalConn,primaryConn);
+			checkClusterConfiguration(myLocalConn, primaryConn);
 			checkNodeConfiguration(local_options.conninfo);
 
 			/*
-			 * Every 3 seconds, insert monitor info
+			 * Every SLEEP_MONITOR seconds, insert monitor info
 			 */
 			log_info(_("%s Starting continuous standby node monitoring\n"), progname);
 			for (;;)
 			{
-				MonitorExecute();
-				sleep(3);
+				StandbyMonitor();
+				sleep(SLEEP_MONITOR);
 			}
 			break;
 		default:
@@ -261,14 +295,25 @@ main(int argc, char **argv)
 	return 0;
 }
 
-
+/*
+ *
+ */
+static void
+WitnessMonitor(void)
+{
+	/*
+	 * Check if the master is still available, if after 5 minutes of retries
+	 * we cannot reconnect, return false.
+	 */
+	return CheckPrimaryConnection(); // this take up to NUM_RETRY * SLEEP_RETRY seconds
+}
 /*
  * Insert monitor info, this is basically the time and xlog replayed,
  * applied on standby and current xlog location in primary.
  * Also do the math to see how far are we in bytes for being uptodate
  */
 static void
-MonitorExecute(void)
+StandbyMonitor(void)
 {
 	PGresult *res;
 	char monitor_standby_timestamp[MAXLEN];
@@ -286,30 +331,8 @@ MonitorExecute(void)
 	 * Check if the master is still available, if after 5 minutes of retries
 	 * we cannot reconnect, try to get a new master.
 	 */
-	for (connection_retries = 0; connection_retries < 15; connection_retries++)
-	{
-		if (PQstatus(primaryConn) != CONNECTION_OK)
-		{
-			log_warning(_("Connection to master has been lost, trying to recover... %i seconds before failover\n", (20*(15-connection_retries))));
-			/* wait 20 seconds between retries */
-			sleep(2);
+	CheckPrimaryConnection(); // this take up to NUM_RETRY * SLEEP_RETRY seconds
 
-			PQreset(primaryConn);
-		}
-		else if (verbose)
-		{
-			if (connection_retries > 0)
-			{
-				log_notice(_("Connection to master has been restored, continue monitoring.\n"));
-			}
-			break;
-		}
-		else
-		{
-			fprintf(stderr, ".");
-			break;
-		}
-	}
 	if (PQstatus(primaryConn) != CONNECTION_OK)
 	{
 		if (local_options.failover == MANUAL_FAILOVER)
@@ -605,16 +628,18 @@ CheckPrimaryConnection(void)
 	int	connection_retries;
 
 	/*
-	 * Check if the master is still available, if after 5 minutes of retries
-	 * we cannot reconnect, shutdown
+	 * Check if the master is still available
+	 * if after NUM_RETRY * SLEEP_RETRY seconds of retries
+	 * we cannot reconnect
+	 * return false
 	 */
-	for (connection_retries = 0; connection_retries < 15; connection_retries++)
+	for (connection_retries = 0; connection_retries < NUM_RETRY; connection_retries++)
 	{
 		if (!is_pgup(primaryConn))
 		{
-			log_warning(_("\n%s: Connection to master has been lost, trying to recover...\n", progname));
-			/* wait 20 seconds between retries */
-			sleep(20);
+			log_warning(_("\n%s: Connection to master has been lost, trying to recover... %i seconds before failover decision\n", progname, (SLEEP_RETRY*(NUM_RETRY-connection_retries))));
+			/* wait SLEEP_RETRY seconds between retries */
+			sleep(SLEEP_RETRY);
 		}
 		else
 		{
