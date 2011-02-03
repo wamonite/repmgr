@@ -81,7 +81,7 @@ static void checkNodeConfiguration(char *conninfo);
 static void CancelQuery(void);
 
 static void MonitorExecute(void);
-static void CheckPrimaryConnection(void);
+static bool CheckPrimaryConnection(void);
 static void update_shared_memory(char *last_wal_standby_applied);
 static void do_failover(void);
 
@@ -203,12 +203,18 @@ main(int argc, char **argv)
 			/* Check that primary is still alive, and standbies are sending info */
 			for (;;)
 			{
-				CheckPrimaryConnection();
+				if (CheckPrimaryConnection())
+				{
 /*
-				CheckActiveStandbiesConnections();
-				CheckInactiveStandbies();
+					CheckActiveStandbiesConnections();
+					CheckInactiveStandbies();
 */
-				sleep(3);
+					sleep(3);
+				}
+				else
+				{
+					exit (1);
+				}
 			}
 			break;
 		case WITNESS_MODE:
@@ -593,17 +599,9 @@ do_failover(void)
 }
 
 
-
-/*
- * Insert monitor info, this is basically the time and xlog replayed,
- * applied on standby and current xlog location in primary.
- * Also do the math to see how far are we in bytes for being uptodate
- */
-static void
+static bool
 CheckPrimaryConnection(void)
 {
-	PGresult *res;
-
 	int	connection_retries;
 
 	/*
@@ -612,13 +610,11 @@ CheckPrimaryConnection(void)
 	 */
 	for (connection_retries = 0; connection_retries < 15; connection_retries++)
 	{
-		if (PQstatus(primaryConn) != CONNECTION_OK)
+		if (!is_pgup(primaryConn))
 		{
-			log_err(_("\n%s: Connection to master has been lost, trying to recover...\n", progname));
+			log_warning(_("\n%s: Connection to master has been lost, trying to recover...\n", progname));
 			/* wait 20 seconds between retries */
 			sleep(20);
-
-			PQreset(primaryConn);
 		}
 		else
 		{
@@ -626,7 +622,7 @@ CheckPrimaryConnection(void)
 			break;
 		}
 	}
-	if (PQstatus(primaryConn) != CONNECTION_OK)
+	if (!is_pgup(primaryConn))
 	{
 		log_err(_("\n%s: We couldn't reconnect for long enough, exiting...\n", progname));
 		/* XXX Anything else to do here? */
@@ -642,7 +638,7 @@ CheckPrimaryConnection(void)
 		PQclear(res);
 		return;
 	}
-	PQclear(res);
+	return true;
 }
 
 

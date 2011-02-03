@@ -119,6 +119,54 @@ is_witness(PGconn *conn, char *cluster, int node_id)
 	return result;
 }
 
+/* check the PQStatus and try to 'select 1' to confirm good connection */
+bool
+is_pgup(PGconn *conn)
+{
+	PGresult   *res;
+	char		sqlquery[MAXQUERY];
+	/* Check the connection status twice in case it changes after reset */
+	bool		twice = false;
+
+	/* Check the connection status twice in case it changes after reset */
+	for (;;)
+	{
+		if (PQstatus(conn) == CONNECTION_OK)
+		{
+			/*
+			* Send a SELECT 1 just to check if connection is OK
+			* the PQstatus() won't catch disconnected connection
+			* XXXX
+			* the error message can be used by repmgrd
+			*/
+			sprintf(sqlquery, "SELECT 1");
+			res = PQexec(conn, sqlquery);
+			// we need to retry, because we might just have loose the connection once
+			if (PQresultStatus(res) != PGRES_TUPLES_OK)
+			{
+				fprintf(stderr, "[ERROR] : PQexec failed: %s\n",
+						PQerrorMessage(conn));
+				PQclear(res);
+				if (twice)
+					return false;
+				PQreset(conn);  // reconnect
+				twice = true;
+			}
+			else
+			{
+				PQclear(res);
+				return true;
+			}
+		}
+		else
+		{
+			if (twice)
+				return false;
+			PQreset(conn);  // reconnect
+			twice = true;
+		}
+	}
+}
 
 
 /*

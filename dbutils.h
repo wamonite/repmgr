@@ -26,6 +26,7 @@ PGconn *establishDBConnectionByParams(const char *keywords[],
                                       const bool exit_on_error);
 bool    is_standby(PGconn *conn);
 bool    is_witness(PGconn *conn, char *cluster, int node_id);
+bool	is_pgup(PGconn *conn);
 char   *pg_version(PGconn *conn, char* major_version);
 bool	guc_setted(PGconn *conn, const char *parameter, const char *op,
                 const char *value);
