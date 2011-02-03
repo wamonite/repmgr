@@ -305,7 +305,7 @@ WitnessMonitor(void)
 	 * Check if the master is still available, if after 5 minutes of retries
 	 * we cannot reconnect, return false.
 	 */
-	return CheckPrimaryConnection(); // this take up to NUM_RETRY * SLEEP_RETRY seconds
+	CheckPrimaryConnection(); // this take up to NUM_RETRY * SLEEP_RETRY seconds
 }
 /*
  * Insert monitor info, this is basically the time and xlog replayed,
@@ -651,17 +651,7 @@ CheckPrimaryConnection(void)
 	{
 		log_err(_("\n%s: We couldn't reconnect for long enough, exiting...\n", progname));
 		/* XXX Anything else to do here? */
-		exit(ERR_BAD_CON);
-	}
-
-	/* Send a SELECT 1 just to check if connection is OK */
-	sprintf(sqlquery, "SELECT 1");
-	res = PQexec(primaryConn, sqlquery);
-	if (PQresultStatus(res) != PGRES_TUPLES_OK)
-	{
-		log_err(_("PQexec failed: %s\n", PQerrorMessage(primaryConn)));
-		PQclear(res);
-		return;
+		return false;
 	}
 	return true;
 }

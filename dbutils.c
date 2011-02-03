@@ -131,7 +131,14 @@ is_pgup(PGconn *conn)
 	/* Check the connection status twice in case it changes after reset */
 	for (;;)
 	{
-		if (PQstatus(conn) == CONNECTION_OK)
+		if (PQstatus(conn) != CONNECTION_OK)
+		{
+			if (twice)
+				return false;
+			PQreset(conn);  // reconnect
+			twice = true;
+		}
+		else
 		{
 			/*
 			* Send a SELECT 1 just to check if connection is OK
@@ -157,13 +164,6 @@ is_pgup(PGconn *conn)
 				PQclear(res);
 				return true;
 			}
-		}
-		else
-		{
-			if (twice)
-				return false;
-			PQreset(conn);  // reconnect
-			twice = true;
 		}
 	}
 }
