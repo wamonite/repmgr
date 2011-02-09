@@ -22,7 +22,7 @@
 #include "strutil.h"
 
 void
-parse_config(const char* config_file, t_configuration_options* options)
+parse_config(const char *config_file, t_configuration_options *options)
 {
 	char *s, buff[MAXLINELENGTH];
 	char name[MAXLEN];
@@ -165,4 +165,66 @@ parse_line(char *buff, char *name, char *value)
 			break;
 	value[j] = '\0';
 	trim(value);
+}
+
+
+bool reload_configuration(char *config_file, t_configuration_options *orig_options);
+{
+	PGconn	*conn;
+
+	t_configuration_options new_options;
+						
+	/*
+	 * Re-read the configuration file: repmgr.conf
+	 */
+	parse_config(config_file, &new_options);
+	if (new_options.node == -1)
+	{
+		fprintf(stderr, "\nCannot load new configuration, will keep current one.\n");
+		return false;
+	}
+
+	if (strcmp(new_options.cluster_name, orig_options->cluster_name) != 0)
+	{
+		fprintf(stderr, "\nCannot change cluster name, will keep current configuration.\n");
+		return false;
+	}
+
+	if (new_options.node != orig_options->node)
+	{
+		fprintf(stderr, "\nCannot change node number, will keep current configuration.\n");
+		return false;
+	}
+
+	if (new_options.failover != MANUAL_FAILOVER && new_options.failover != AUTOMATIC_FAILOVER)
+	{
+		fprintf(stderr, "\nNew value for failover is not valid. Should be manual or automatic.\n");
+		return false;
+	}
+
+	/* Test conninfo string */
+	conn = establishDBConnection(new_options.conninfo, false);
+	if (!conn || (PQstatus(conn) != CONNECTION_OK))
+	{
+		fprintf(stderr, "\nconninfo string is not valid, will keep current configuration.\n");
+		return false;
+	}
+	PQfinish(conn);
+
+	/* Configuration seems ok, will load new values */
+	strcpy(orig_options->cluster_name, new_options.cluster_name);
+	orig_options->node = new_options.node;
+	strcpy(orig_options->conninfo, new_options.conninfo);
+	orig_options->failover = new_options.failover;
+	strcpy(orig_options->promote, new_options.promote);
+	strcpy(orig_options->follow, new_options.follow);
+	strcpy(orig_options->rsync_options, new_options.rsync_options);
+/*
+ * These ones can change with a simple SIGHUP?
+
+	strcpy (orig_options->loglevel, new_options.loglevel);
+	strcpy (orig_options->logfacility, new_options.logfacility);
+*/
+
+	return true;
 }

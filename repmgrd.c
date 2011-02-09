@@ -88,8 +88,15 @@ static void do_failover(void);
 
 static unsigned long long int walLocationToBytes(char *wal_location);
 
+/*
+ * Flag to mark SIGHUP. Whenever the main loop comes around it
+ * will reread the configuration file. 
+ */
+static volatile sig_atomic_t got_SIGHUP = false;
+
+static void handle_sighup(SIGNAL_ARGS);
 static void handle_sigint(SIGNAL_ARGS);
-static void setup_cancel_handler(void);
+static void setup_event_handlers(void);
 
 #define CloseConnections()	\
 	if (PQisBusy(primaryConn) == 1) \
@@ -147,7 +154,7 @@ main(int argc, char **argv)
 		}
 	}
 
-	setup_cancel_handler();
+	setup_event_handlers();
 
 	/*
 	 * Read the configuration file: repmgr.conf
@@ -224,6 +231,17 @@ main(int argc, char **argv)
 					 */
 					exit (1);
 				}
+
+				if (got_SIGHUP)
+				{
+					/* if we can reload, then could need to change myLocalConn */
+					if (reload_configuration(config_file, &local_options))
+					{
+						PQfinish(myLocalConn);
+						myLocalConn = establishDBConnection(local_options.conninfo, true);
+					}
+					got_SIGHUP = false;
+				}
 			}
 			break;
 		case WITNESS_MODE:
@@ -250,6 +268,17 @@ main(int argc, char **argv)
 			{
 				WitnessMonitor();
 				sleep(SLEEP_MONITOR);
+
+				if (got_SIGHUP)
+				{
+					/* if we can reload, then could need to change myLocalConn */
+					if (reload_configuration(config_file, &local_options))
+					{
+						PQfinish(myLocalConn);
+						myLocalConn = establishDBConnection(local_options.conninfo, true);
+					}
+					got_SIGHUP = false;
+				}
 			}
 			break;
 		case STANDBY_MODE:
@@ -276,6 +305,17 @@ main(int argc, char **argv)
 			{
 				StandbyMonitor();
 				sleep(SLEEP_MONITOR);
+
+				if (got_SIGHUP)
+				{
+					/* if we can reload, then could need to change myLocalConn */
+					if (reload_configuration(config_file, &local_options))
+					{
+						PQfinish(myLocalConn);
+						myLocalConn = establishDBConnection(local_options.conninfo, true);
+					}
+					got_SIGHUP = false;
+				}
 			}
 			break;
 		default:
@@ -307,6 +347,7 @@ WitnessMonitor(void)
 	 */
 	CheckPrimaryConnection(); // this take up to NUM_RETRY * SLEEP_RETRY seconds
 }
+
 /*
  * Insert monitor info, this is basically the time and xlog replayed,
  * applied on standby and current xlog location in primary.
@@ -797,10 +838,17 @@ handle_sigint(SIGNAL_ARGS)
 	CloseConnections();
 }
 
+/* SIGHUP: set flag to re-read config file at next convenient time */
+static void
+handle_sighup(SIGNAL_ARGS)
+{
+    got_SIGHUP = true;
+}
 
 static void
-setup_cancel_handler(void)
+setup_event_handlers(void)
 {
+	pqsignal(SIGHUP, handle_sighup);
 	pqsignal(SIGINT, handle_sigint);
 }
 #endif
