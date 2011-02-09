@@ -1489,6 +1489,8 @@ do_witness_create(void)
 		PQfinish(witnessconn);
 		return;
 	}
+	PQfinish(masterconn);
+	PQfinish(witnessconn);
 
 	log_notice(_("Configuration has been succesfully copied to the witness\n"));
 }

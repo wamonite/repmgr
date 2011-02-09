@@ -341,12 +341,66 @@ main(int argc, char **argv)
 static void
 WitnessMonitor(void)
 {
+	char monitor_witness_timestamp[MAXLEN];
+	PGresult	*res;
+
 	/*
 	 * Check if the master is still available, if after 5 minutes of retries
 	 * we cannot reconnect, return false.
 	 */
 	CheckPrimaryConnection(); // this take up to NUM_RETRY * SLEEP_RETRY seconds
+
+	if (PQstatus(primaryConn) != CONNECTION_OK)
+	{
+		/* 
+		 * If we can't reconnect, just exit...	
+		 * XXX we need to make witness connect to the new master
+		 */
+		exit(0);
+	}
+
+	/*
+	 * first check if there is a command being executed,
+	 * and if that is the case, cancel the query so i can
+	 * insert the current record
+	 */
+	if (PQisBusy(primaryConn) == 1)
+		CancelQuery();
+
+	/* Get local xlog info */
+	sqlquery_snprintf(sqlquery, "SELECT CURRENT_TIMESTAMP ");
+
+	res = PQexec(myLocalConn, sqlquery);
+	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	{
+		log_err(_("PQexec failed: %s\n", PQerrorMessage(myLocalConn)));
+		PQclear(res);
+		/* if there is any error just let it be and retry in next loop */
+		return;
+	}
+
+	strcpy(monitor_witness_timestamp, PQgetvalue(res, 0, 0));
+	PQclear(res);
+
+	/*
+	 * Build the SQL to execute on primary
+	 */
+	sqlquery_snprintf(sqlquery,
+	        "INSERT INTO %s.repl_monitor "
+	        "VALUES(%d, %d, '%s'::timestamp with time zone, "
+	        " pg_current_xlog_location(), null,  "
+	        " 0, 0)",
+	        repmgr_schema, primary_options.node, local_options.node, monitor_witness_timestamp);
+
+	/*
+	 * Execute the query asynchronously, but don't check for a result. We
+	 * will check the result next time we pause for a monitor step.
+	 */
+	if (PQsendQuery(primaryConn, sqlquery) == 0)
+		log_warning(_("Query could not be sent to primary. %s\n",
+		        PQerrorMessage(primaryConn)));
 }
+
 
 /*
  * Insert monitor info, this is basically the time and xlog replayed,
