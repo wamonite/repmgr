@@ -14,6 +14,7 @@ rsync_options=--archive --checksum --compress --progress --rsh=ssh
 
 # Autofailover options
 failover=automatic
+priority=-1
 promote_command='repmgr promote'
 follow_command='repmgr follow'
 

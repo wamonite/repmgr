@@ -1288,7 +1288,7 @@ do_witness_create(void)
 
 	/* these are no used here, but they can be in the repmgr.conf */
 	int			failover;
-	int			priority;
+	int			priority = -1;
 	char		promote_command[MAXLEN];
 	char		follow_command[MAXLEN];
 
@@ -1434,9 +1434,9 @@ do_witness_create(void)
 	}
 
 	/* register ourselves in the master */
-	sprintf(sqlquery, "INSERT INTO repmgr_%s.repl_nodes(id, cluster, conninfo, witness) "
-	        "VALUES (%d, '%s', '%s', true)",
-	        myClusterName, myLocalId, myClusterName, conninfo);
+	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes(id, cluster, conninfo, priority, witness) "
+	        "VALUES (%d, '%s', '%s', %d, true)",
+	        repmmgr_schema, local_options.node, local_options.cluster_name, local_options.conninfo);
 
 	if (!PQexec(masterconn, sqlquery))
 	{
@@ -1899,11 +1899,12 @@ copy_configuration(PGconn *masterconn, PGconn *witnessconn, char *myClusterName)
 	}
 	for (i = 0; i < PQntuples(res); i++)
 	{
-		sprintf(sqlquery, "INSERT INTO repmgr_%s.repl_nodes(id, cluster, conninfo, witness) "
-						  "VALUES (%d, '%s', '%s', '%s')",
-								myClusterName, atoi(PQgetvalue(res, i, 0)), 
-								myClusterName, PQgetvalue(res, i, 2), 
-								PQgetvalue(res, i, 3));
+		sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes(id, cluster, conninfo, priority, witness) "
+						  "VALUES (%d, '%s', '%s', %d, '%s')",
+								repmgr_schema, atoi(PQgetvalue(res, i, 0)), 
+								local_options.cluster_name, PQgetvalue(res, i, 2), 
+								atoi(PQgetvalue(res, i, 3)), 
+								PQgetvalue(res, i, 4));
 	
 		if (!PQexec(witnessconn, sqlquery))
 		{
