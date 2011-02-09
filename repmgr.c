@@ -446,9 +446,9 @@ do_master_register(void)
 		}
 	}
 
-	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes (id, cluster, conninfo) "
-	                  "VALUES (%d, '%s', '%s')",
-	                  repmgr_schema, options.node, options.cluster_name, options.conninfo);
+	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes (id, cluster, conninfo, priority) "
+	                  "VALUES (%d, '%s', '%s', %d)",
+	                  repmgr_schema, options.node, options.cluster_name, options.conninfo, options.priority);
 	log_debug("master register: %s\n", sqlquery);
 
 	if (!PQexec(conn, sqlquery))
@@ -587,9 +587,9 @@ do_standby_register(void)
 		}
 	}
 
-	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes(id, cluster, conninfo) "
-	                  "VALUES (%d, '%s', '%s')",
-	                  repmgr_schema, options.node, options.cluster_name, options.conninfo);
+	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes(id, cluster, conninfo, priority) "
+	                  "VALUES (%d, '%s', '%s', %d)",
+	                  repmgr_schema, options.node, options.cluster_name, options.conninfo, options.priority);
 	log_debug("standby register: %s\n", sqlquery);
 
 	if (!PQexec(master_conn, sqlquery))
@@ -1285,15 +1285,18 @@ do_witness_create(void)
 	int     	myLocalId   = -1;
 	char 		conninfo[MAXLEN];
 	char		master_hba_file[MAXLEN];
+
 	/* these are no used here, but they can be in the repmgr.conf */
 	int			failover;
+	int			priority;
 	char		promote_command[MAXLEN];
 	char		follow_command[MAXLEN];
 
 	/*
 	 * Read the configuration file: repmgr.conf
 	 */
-	parse_config(config_file, myClusterName, &myLocalId, conninfo, &failover, promote_command, follow_command);
+	parse_config(config_file, myClusterName, &myLocalId, conninfo, 
+				 &failover, &priority, promote_command, follow_command);
 	if (myLocalId == -1)
 	{
 		fprintf(stderr, "Node information is missing. "
@@ -1818,6 +1821,7 @@ create_schema(PGconn *conn, char *myClusterName)
 	                  "  id        integer primary key, "
 	                  "  cluster   text    not null,    "
 	                  "  conninfo  text    not null,    " 
+					  "  priority  integer not null,    "
 					  "  witness   boolean not null default false)", repmgr_schema);
 	log_debug("master register: %s\n", sqlquery);
 	if (!PQexec(conn, sqlquery))

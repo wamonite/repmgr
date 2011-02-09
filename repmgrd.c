@@ -553,16 +553,14 @@ do_failover(void)
 	PGresult *res2;
 	char 	sqlquery[8192];
 
-	/* initialize on 1 because i'm ignoring myself most of the time */
-	int		total_nodes = 1;
-	int		visible_nodes = 1;
+	int		total_nodes = 0;
+	int		visible_nodes = 0;
 
 	int		i;
 	int		r;
 
 	int 	node;
 	char	nodeConninfo[MAXLEN];
-	int		numelm;
 
     unsigned int uxlogid;
     unsigned int uxrecoff;
@@ -592,12 +590,13 @@ do_failover(void)
 	/* write last location in shared memory */
 	update_shared_memory(PQgetvalue(res1, 0, 0));
 
-	/* get a list of standby nodes, ignoring myself */
+	/* get a list of standby nodes, including myself */
 	sprintf(sqlquery, "SELECT * "
-						"  FROM repmgr_%s.repl_nodes "
-						" WHERE id IN (SELECT standby_node FROM repmgr_%s.repl_status WHERE standby_node <> %d) "
-						"   AND cluster = '%s' ",
-					myClusterName, myClusterName, myLocalId, myClusterName);
+						"  FROM %s.repl_nodes "
+						" WHERE id IN (SELECT standby_node FROM %s.repl_status) "
+						"   AND cluster = '%s' "
+						" ORDER BY priority ",
+					repmgr_schema, repmgr_schema, local_options.cluster_name);
  
      res1 = PQexec(myLocalConn, sqlquery);
      if (PQresultStatus(res1) != PGRES_TUPLES_OK)
@@ -608,7 +607,7 @@ do_failover(void)
  		exit(ERR_BAD_QUERY);
      }
  
- 	/* ask for the locations of other nodes */
+ 	/* ask for the locations */
 	for (i = 0; i < PQntuples(res1); i++)
 	{
 		node = atoi(PQgetvalue(res1, i, 0));
@@ -619,7 +618,7 @@ do_failover(void)
 		/* if we can't see the node just skip it */
 		if (PQstatus(nodeConn) != CONNECTION_OK)
 			continue;
- 
+
  		sprintf(sqlquery, "SELECT repmgr_get_last_standby_location()");
      	res2 = PQexec(nodeConn, sqlquery);
      	if (PQresultStatus(res2) != PGRES_TUPLES_OK)
@@ -647,8 +646,7 @@ do_failover(void)
 	/* Close the connection to this server */
  	PQfinish(myLocalConn);
 	/* total nodes that are registered */
-	total_nodes += i; 
- 	numelm = i;
+	total_nodes = i; 
  
 	/* 
 	 * am i on the group that should keep alive? 
@@ -661,28 +659,33 @@ do_failover(void)
 		exit(ERR_FAILOVER_FAIL);
 	}
 
-	/* start assuming this standby is the best candidate and compare with the other ones to decide */
-	if (sscanf(last_wal_standby_applied, "%X/%X", &uxlogid, &uxrecoff) != 2)
-		log_info(_("could not parse transaction log location \"%s\"", last_wal_standby_applied));
-
- 	best_candidate.nodeId = myLocalId;
- 	best_candidate.xlog_location.xlogid = uxlogid;
- 	best_candidate.xlog_location.xrecoff = uxrecoff;
- 	best_candidate.is_ready = true;
+	/* start with the first node, and then move on to the next one */
+ 	best_candidate.nodeId                = nodes[0].nodeId;
+ 	best_candidate.xlog_location.xlogid  = nodes[0].xlog_location.xlogid;
+ 	best_candidate.xlog_location.xrecoff = nodes[0].xlog_location.xrecoff;
+ 	best_candidate.is_ready              = nodes[0].is_ready;
  
-	/* determine which one is the best candidate to promote to primary */
-	for (i = 0; i <= numelm; i++)
+	/* 
+	 * determine which one is the best candidate to promote to primary 
+	 * loop starting on 1 because 0 was assigned as the first best_candidate
+	 */
+	for (i = 1; i <= total_nodes; i++)
 	{
 		if (!nodes[i].is_ready)
 			continue;
 
- 		/* we use the macros provided to compare XLogPtr */
- 		if (XLByteLT(best_candidate.xlog_location, nodes[i].xlog_location))
+ 		/* we use the macros provided by xlogdefs.h to compare XLogPtr */
+		/* 
+		 * Nodes are retrieved ordered by priority, so if the current  
+		 * best candidate is lower or equal to the next node's wal location
+		 * then assign next node as the new best candidate.
+		 */
+ 		if (XLByteLE(best_candidate.xlog_location, nodes[i].xlog_location))
  		{
- 			best_candidate.nodeId = nodes[i].nodeId;
- 			best_candidate.xlog_location.xlogid = nodes[i].xlog_location.xlogid;
+ 			best_candidate.nodeId                = nodes[i].nodeId;
+ 			best_candidate.xlog_location.xlogid  = nodes[i].xlog_location.xlogid;
  			best_candidate.xlog_location.xrecoff = nodes[i].xlog_location.xrecoff;
- 			best_candidate.is_ready = nodes[i].is_ready;
+ 			best_candidate.is_ready              = nodes[i].is_ready;
  		}	
  	}
  

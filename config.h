@@ -29,6 +29,7 @@ typedef struct
 	int node;
 	char conninfo[MAXLEN];
 	int failover;
+	int priority;
 	char promote_command[MAXLEN]; 
 	char follow_command[MAXLEN]; 
 	char loglevel[MAXLEN];
