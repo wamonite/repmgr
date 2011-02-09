@@ -84,6 +84,7 @@ static void StandbyMonitor(void);
 static void WitnessMonitor(void);
 static bool CheckPrimaryConnection(void);
 static void update_shared_memory(char *last_wal_standby_applied);
+static void update_registration(void);
 static void do_failover(void);
 
 static unsigned long long int walLocationToBytes(char *wal_location);
@@ -239,6 +240,8 @@ main(int argc, char **argv)
 					{
 						PQfinish(myLocalConn);
 						myLocalConn = establishDBConnection(local_options.conninfo, true);
+						update_registration();
+						got_SIGHUP = false;
 					}
 					got_SIGHUP = false;
 				}
@@ -276,6 +279,7 @@ main(int argc, char **argv)
 					{
 						PQfinish(myLocalConn);
 						myLocalConn = establishDBConnection(local_options.conninfo, true);
+						update_registration();
 					}
 					got_SIGHUP = false;
 				}
@@ -313,6 +317,7 @@ main(int argc, char **argv)
 					{
 						PQfinish(myLocalConn);
 						myLocalConn = establishDBConnection(local_options.conninfo, true);
+						update_registration();
 					}
 					got_SIGHUP = false;
 				}
@@ -940,6 +945,27 @@ update_shared_memory(char *last_wal_standby_applied)
 	{
 		log_warning(_("Cannot update this standby's shared memory: %s", PQerrorMessage(myLocalConn)));
 		/* XXX is this enough reason to terminate this repmgrd? */
+	}
+	PQclear(res);
+}
+
+static void
+update_registration(void)
+{
+	PGresult *res;
+
+	sqlquery_snprintf(sqlquery, "UPDATE %s.repl_nodes "
+					  "   SET conninfo = '%s', "
+                      "       priority = %d "
+					  " WHERE id = %d", 
+				repmgr_schema, local_options.conninfo, local_options.priority, local_options.node);
+
+	res = PQexec(primaryConn, sqlquery);
+	if (PQresultStatus(res) != PGRES_COMMAND_OK)
+	{
+		log_err(_("Cannot update registration: %s", PQerrorMessage(primaryConn)));
+		CloseConnections();
+		exit(ERR_DB_CON);
 	}
 	PQclear(res);
 }
