@@ -624,7 +624,7 @@ do_failover(void)
 		if (PQstatus(nodeConn) != CONNECTION_OK)
 			continue;
 
- 		sprintf(sqlquery, "SELECT repmgr_get_last_standby_location()");
+ 		sprintf(sqlquery, "SELECT repmgr.repmgr_get_last_standby_location()");
      	res2 = PQexec(nodeConn, sqlquery);
      	if (PQresultStatus(res2) != PGRES_TUPLES_OK)
      	{
@@ -636,8 +636,8 @@ do_failover(void)
  
 		visible_nodes++;
 
-		if (sscanf(PQgetvalue(res2, i, 0), "%X/%X", &uxlogid, &uxrecoff) != 2)
-			log_info(_("could not parse transaction log location \"%s\"", PQgetvalue(res2, i, 0)));
+		if (sscanf(PQgetvalue(res2, 0, 0), "%X/%X", &uxlogid, &uxrecoff) != 2)
+			log_info(_("could not parse transaction log location \"%s\"", PQgetvalue(res2, 0, 0)));
 
  		nodes[i].nodeId = node;
  		nodes[i].xlog_location.xlogid = uxlogid;
@@ -936,7 +936,7 @@ update_shared_memory(char *last_wal_standby_applied)
 {
 	PGresult *res;
 
-	sprintf(sqlquery, "SELECT repmgr_update_standby_location('%s')", 
+	sprintf(sqlquery, "SELECT repmgr.repmgr_update_standby_location('%s')", 
 				last_wal_standby_applied);
 
 	/* If an error happens, just inform about that and continue */
