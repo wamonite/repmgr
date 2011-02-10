@@ -1,5 +1,5 @@
 *~
-*.o
+*.so
 repmgr
 repmgrd
 README.htm*
