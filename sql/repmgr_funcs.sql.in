@@ -4,7 +4,7 @@
  *
  */
 
-SET SEARCH_PATH TO 'repmgr';
+-- SET SEARCH_PATH TO 'repmgr';
 
 CREATE FUNCTION repmgr_update_standby_location(text) RETURNS boolean
 AS 'MODULE_PATHNAME', 'repmgr_update_standby_location'
