@@ -57,7 +57,6 @@ PGconn *myLocalConn = NULL;
 
 /* Primary info */
 t_configuration_options primary_options;
-
 PGconn *primaryConn = NULL;
 
 char sqlquery[QUERY_STR_LEN];
@@ -572,7 +571,7 @@ do_failover(void)
     unsigned int uxrecoff;
 	char last_wal_standby_applied[MAXLEN];
 
-	PGconn	*nodeConn;
+	PGconn	*nodeConn = NULL;
 
  	/* 
      * will get info about until 50 nodes, 
