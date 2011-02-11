@@ -207,6 +207,13 @@ main(int argc, char **argv)
 			checkClusterConfiguration(myLocalConn, primaryConn);
 			checkNodeConfiguration(local_options.conninfo);
 
+			if (reload_configuration(config_file, &local_options))
+			{
+				PQfinish(myLocalConn);
+				myLocalConn = establishDBConnection(local_options.conninfo, true);
+				update_registration();
+			}
+
 			log_info(_("%s Starting continuous primary connection check\n"), progname);
 			/* Check that primary is still alive, and standbies are sending info */
 			/*
@@ -262,6 +269,13 @@ main(int argc, char **argv)
 			checkClusterConfiguration(myLocalConn, primaryConn);
 			checkNodeConfiguration(local_options.conninfo);
 
+			if (reload_configuration(config_file, &local_options))
+			{
+				PQfinish(myLocalConn);
+				myLocalConn = establishDBConnection(local_options.conninfo, true);
+				update_registration();
+			}
+
 			/*
 			 * Every SLEEP_MONITOR seconds, do witness checks
 			 */
@@ -300,6 +314,12 @@ main(int argc, char **argv)
 			checkClusterConfiguration(myLocalConn, primaryConn);
 			checkNodeConfiguration(local_options.conninfo);
 
+			if (reload_configuration(config_file, &local_options))
+			{
+				PQfinish(myLocalConn);
+				myLocalConn = establishDBConnection(local_options.conninfo, true);
+				update_registration();
+			}
 			/*
 			 * Every SLEEP_MONITOR seconds, insert monitor info
 			 */
