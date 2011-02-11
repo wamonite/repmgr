@@ -1448,6 +1448,7 @@ do_witness_create(void)
 
 	/* Let the server start */
 	sleep(2);
+
 	/*
 		create the local user and local db if it is not the default one
 		values[2] is the username we use to connect to master,
@@ -1868,9 +1869,31 @@ create_schema(PGconn *conn, char *myClusterName)
 		exit(ERR_BAD_CONFIG);
 	}
 
+	/* XXX Here we MUST try to load the repmgr_function.sql not hardcode it here */
+	sprintf(sqlquery,
+			"CREATE OR REPLACE FUNCTION public.repmgr_update_standby_location(text) RETURNS boolean "
+			"AS '$libdir/repmgr_funcs', 'repmgr_update_standby_location' "
+			"LANGUAGE C STRICT ");
+	if (!PQexec(conn, sqlquery))
+	{
+		fprintf(stderr, "Cannot create the function repmgr_update_standby_location: %s\n",
+		        PQerrorMessage(conn));
+		return false;
+	}
+
+	sprintf(sqlquery,
+			"CREATE OR REPLACE FUNCTION public.repmgr_get_last_standby_location() RETURNS text "
+			"AS '$libdir/repmgr_funcs', 'repmgr_get_last_standby_location' "
+			"LANGUAGE C STRICT ");
+	if (!PQexec(conn, sqlquery))
+	{
+		fprintf(stderr, "Cannot create the function repmgr_get_last_standby_location: %s\n",
+		        PQerrorMessage(conn));
+		return false;
+	}
+
 	return true;
 }
-
 
 
 static bool 
