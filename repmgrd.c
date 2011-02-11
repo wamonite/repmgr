@@ -661,7 +661,7 @@ do_failover(void)
 	 * am i on the group that should keep alive? 
 	 * if i see less than half of total_nodes then i should do nothing
 	 */
-	if (visible_nodes < (total_nodes / 2.0));
+	if (visible_nodes < (total_nodes / 2.0))
 	{
 		log_err(_("Can't reach most of the nodes, let the others standby servers decide which one will be the primary.\n"
 				  "Manual action will be needed to readd this node to the cluster."));
