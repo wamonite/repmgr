@@ -625,11 +625,12 @@ do_failover(void)
 		if (PQstatus(nodeConn) != CONNECTION_OK)
 			continue;
 
- 		sprintf(sqlquery, "SELECT repmgr_get_last_standby_location()");
+ 		sqlquery_snprintf(sqlquery, "SELECT repmgr_get_last_standby_location()");
      	res2 = PQexec(nodeConn, sqlquery);
      	if (PQresultStatus(res2) != PGRES_TUPLES_OK)
      	{
      	    log_info(_("Can't get node's last standby location: %s", PQerrorMessage(nodeConn)));
+			log_info(_("Connection details: %s", nodeConninfo));
      	    PQclear(res2);
          	PQfinish(nodeConn);
  			continue;
@@ -664,7 +665,7 @@ do_failover(void)
 	 */
 	if (visible_nodes < (total_nodes / 2.0))
 	{
-		log_err(_("Can't reach most of the nodes, let the others standby servers decide which one will be the primary.\n"
+		log_err(_("Can't reach most of the nodes.\n Let the other standby servers decide which one will be the primary.\n"
 				  "Manual action will be needed to readd this node to the cluster."));
 		exit(ERR_FAILOVER_FAIL);
 	}
