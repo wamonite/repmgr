@@ -361,6 +361,7 @@ WitnessMonitor(void)
 		 * If we can't reconnect, just exit...	
 		 * XXX we need to make witness connect to the new master
 		 */
+		PQfinish(myLocalConn);
 		exit(0);
 	}
 
