@@ -180,6 +180,7 @@ bool reload_configuration(char *config_file, t_configuration_options *orig_optio
 	/*
 	 * Re-read the configuration file: repmgr.conf
 	 */
+	fprintf(stderr, "Reloading configuration file and updating repmgr tables\n");
 	parse_config(config_file, &new_options);
 	if (new_options.node == -1)
 	{
