@@ -923,6 +923,7 @@ static void
 handle_sigint(SIGNAL_ARGS)
 {
 	CloseConnections();
+	exit(1);
 }
 
 /* SIGHUP: set flag to re-read config file at next convenient time */
