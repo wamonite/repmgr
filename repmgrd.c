@@ -650,14 +650,18 @@ do_failover(void)
  	PQclear(res1);
 	/* Close the connection to this server */
  	PQfinish(myLocalConn);
-	/* total nodes that are registered */
-	total_nodes = i; 
+
+	/* 
+	 * total nodes that are registered, include master which is a node but was 
+	 * not counted because it's not a standby
+	 */
+	total_nodes = i + 1; 
  
 	/* 
 	 * am i on the group that should keep alive? 
 	 * if i see less than half of total_nodes then i should do nothing
 	 */
-	if (visible_nodes < (total_nodes / 2))
+	if (visible_nodes < (total_nodes / 2.0));
 	{
 		log_err(_("Can't reach most of the nodes, let the others standby servers decide which one will be the primary.\n"
 				  "Manual action will be needed to readd this node to the cluster."));
