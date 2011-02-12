@@ -615,6 +615,12 @@ do_failover(void)
 	/* write last location in shared memory */
 	update_shared_memory(PQgetvalue(res1, 0, 0));
 
+	/*
+	 * we sleep the monitor time + one second
+	 * we bet it should be enough for other repmgrd to update their own data
+	 */
+	sleep(SLEEP_MONITOR+1);
+
 	/* get a list of standby nodes, including myself */
 	sprintf(sqlquery, "SELECT * "
 						"  FROM %s.repl_nodes "
