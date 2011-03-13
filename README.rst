@@ -245,11 +245,6 @@ USE_PGXS option you also need to install the corresponding development package::
 
   sudo apt-get install postgresql-server-dev-9.0
 
-If your using Debian packages for PostgreSQL and are building repmgr with the
-USE_PGXS option you also need to install the corresponding development package::
-
-  sudo apt-get install postgresql-server-dev-9.0
-
 If you build and install repmgr manually it will not be on the system path. The
 binaries will be installed in /usr/lib/postgresql/$version/bin/ which is not on
 the default path. The reason behind this is that Ubuntu/Debian systems manage
