@@ -46,8 +46,8 @@ parse_config(const char *config_file, t_configuration_options *options)
 	 */
 	if (fp == NULL)
 	{
-		fprintf(stderr, _("Did not find the configuration file '%s', continuing\n"), config_file);
-		return;
+		log_err(_("Did not find the configuration file '%s', continuing\n"), config_file);
+		exit(ERR_BAD_CONFIG);
 	}
 
 	/* Read next line */
@@ -84,7 +84,7 @@ parse_config(const char *config_file, t_configuration_options *options)
 				*failover = AUTOMATIC_FAILOVER;
 			else
 			{
-				printf ("WARNING: value for failover option is incorrect, it should be automatic or manual. Defaulting to manual.\n");
+				log_warning(_("value for failover option is incorrect, it should be automatic or manual. Defaulting to manual.\n"));
 				options->failover = MANUAL_FAILOVER;
 			}
 		}
@@ -95,7 +95,7 @@ parse_config(const char *config_file, t_configuration_options *options)
 		else if (strcmp(name, "follow_command") == 0)
 			strncpy(options->follow_command, value, MAXLEN);
 		else
-			printf ("WARNING: %s/%s: Unknown name/value pair!\n", name, value);
+			log_warning(_("%s/%s: Unknown name/value pair!\n", name, value));
 	}
 
 	/* Close file */
@@ -104,18 +104,17 @@ parse_config(const char *config_file, t_configuration_options *options)
 	/* Check config settings */
 	if (strnlen(options->cluster_name, MAXLEN)==0)
 	{
-		fprintf(stderr, "Cluster name is missing. "
-		        "Check the configuration file.\n");
+		log_err(_("Cluster name is missing. Check the configuration file.\n"));
 		exit(ERR_BAD_CONFIG);
 	}
 
 	if (options->node == -1)
 	{
-		fprintf(stderr, "Node information is missing. "
-		        "Check the configuration file.\n");
+		log_err(_("Node information is missing. Check the configuration file.\n"));
 		exit(ERR_BAD_CONFIG);
 	}
 }
+
 
 char *
 trim (char *s)
@@ -136,6 +135,7 @@ trim (char *s)
 	strcpy (s, s1);
 	return s;
 }
+
 
 void
 parse_line(char *buff, char *name, char *value)
@@ -180,29 +180,29 @@ bool reload_configuration(char *config_file, t_configuration_options *orig_optio
 	/*
 	 * Re-read the configuration file: repmgr.conf
 	 */
-	fprintf(stderr, "Reloading configuration file and updating repmgr tables\n");
+	log_info(_("Reloading configuration file and updating repmgr tables\n"));
 	parse_config(config_file, &new_options);
 	if (new_options.node == -1)
 	{
-		fprintf(stderr, "\nCannot load new configuration, will keep current one.\n");
+		log_warning(_("\nCannot load new configuration, will keep current one.\n"));
 		return false;
 	}
 
 	if (strcmp(new_options.cluster_name, orig_options->cluster_name) != 0)
 	{
-		fprintf(stderr, "\nCannot change cluster name, will keep current configuration.\n");
+		log_warning(_("\nCannot change cluster name, will keep current configuration.\n"));
 		return false;
 	}
 
 	if (new_options.node != orig_options->node)
 	{
-		fprintf(stderr, "\nCannot change node number, will keep current configuration.\n");
+		log_warning(_("\nCannot change node number, will keep current configuration.\n"));
 		return false;
 	}
 
 	if (new_options.failover != MANUAL_FAILOVER && new_options.failover != AUTOMATIC_FAILOVER)
 	{
-		fprintf(stderr, "\nNew value for failover is not valid. Should be manual or automatic.\n");
+		log_warning(_("\nNew value for failover is not valid. Should be manual or automatic.\n"));
 		return false;
 	}
 
@@ -210,7 +210,7 @@ bool reload_configuration(char *config_file, t_configuration_options *orig_optio
 	conn = establishDBConnection(new_options.conninfo, false);
 	if (!conn || (PQstatus(conn) != CONNECTION_OK))
 	{
-		fprintf(stderr, "\nconninfo string is not valid, will keep current configuration.\n");
+		log_warning(_("\nconninfo string is not valid, will keep current configuration.\n"));
 		return false;
 	}
 	PQfinish(conn);

@@ -190,7 +190,7 @@ main(int argc, char **argv)
 	 * Set my server mode, establish a connection to primary
 	 * and start monitor
 	 */
-	if (is_witness(myLocalConn, myClusterName, myLocalId))
+	if (is_witness(myLocalConn, repmgr_schema, local_options.cluster_name, local_options.node))
 		myLocalMode = WITNESS_MODE;
 	else if (is_standby(myLocalConn))
 		myLocalMode = STANDBY_MODE;

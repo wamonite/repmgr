@@ -1280,39 +1280,12 @@ do_witness_create(void)
 
 	char	master_version[MAXVERSIONSTR];
 
-	char    	myClusterName[MAXLEN];
 	char    	createcommand[MAXLEN];
-	int     	myLocalId   = -1;
 	char 		conninfo[MAXLEN];
 	char		master_hba_file[MAXLEN];
 
-	/* these are no used here, but they can be in the repmgr.conf */
-	int			failover;
-	int			priority = -1;
-	char		promote_command[MAXLEN];
-	char		follow_command[MAXLEN];
-
-	/*
-	 * Read the configuration file: repmgr.conf
-	 */
-	parse_config(config_file, myClusterName, &myLocalId, conninfo, 
-				 &failover, &priority, promote_command, follow_command);
-	if (myLocalId == -1)
-	{
-		fprintf(stderr, "Node information is missing. "
-		        "Check the configuration file.\n");
-		exit(1);
-	}
-
-	/* if dest_dir hasn't been provided, initialize to current directory */
-	if (dest_dir == NULL)
-	{
-		dest_dir = malloc(5);
-		strcpy(dest_dir, ".");
-	}
-
 	/* Check this directory could be used as a PGDATA dir */
-	if (!create_pgdir(dest_dir, runtime_options.force))
+	if (!create_pgdir(runtime_options.dest_dir, runtime_options.force))
 	{
 		return;
 	}

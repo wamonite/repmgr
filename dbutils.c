@@ -93,21 +93,21 @@ is_standby(PGconn *conn)
 
 
 bool
-is_witness(PGconn *conn, char *cluster, int node_id)
+is_witness(PGconn *conn, char *schema, char *cluster, int node_id)
 {
 	PGresult   *res;
 	bool		result;
 	char		sqlquery[MAXQUERY];
 
-	snprintf(sqlquery, MAXQUERY, "SELECT witness from repmgr_%s.repl_nodes where id = %d",
-								 cluster, node_id);
+	sqlquery_snprintf(sqlquery, "SELECT witness from %s.repl_nodes where cluster = '%s' and id = %d",
+								 schema, cluster, node_id);
 	res = PQexec(conn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		fprintf(stderr, "Can't query server mode: %s", PQerrorMessage(conn));
+		log_err(_("Can't query server mode: %s", PQerrorMessage(conn)));
 		PQclear(res);
 		PQfinish(conn);
-		exit(1);
+		exit(ERR_DB_QUERY);
 	}
 
 	if (strcmp(PQgetvalue(res, 0, 0), "f") == 0)
@@ -118,6 +118,7 @@ is_witness(PGconn *conn, char *cluster, int node_id)
 	PQclear(res);
 	return result;
 }
+
 
 /* check the PQStatus and try to 'select 1' to confirm good connection */
 bool
@@ -146,13 +147,12 @@ is_pgup(PGconn *conn)
 			* XXXX
 			* the error message can be used by repmgrd
 			*/
-			sprintf(sqlquery, "SELECT 1");
+			sqlquery_snprintf(sqlquery, "SELECT 1");
 			res = PQexec(conn, sqlquery);
 			// we need to retry, because we might just have loose the connection once
 			if (PQresultStatus(res) != PGRES_TUPLES_OK)
 			{
-				fprintf(stderr, "[ERROR] : PQexec failed: %s\n",
-						PQerrorMessage(conn));
+				log_err(_("PQexec failed: %s\n", PQerrorMessage(conn)));
 				PQclear(res);
 				if (twice)
 					return false;
@@ -280,7 +280,7 @@ get_cluster_size(PGconn *conn)
  * connection string is placed there.
  */
 PGconn *
-getMasterConnection(PGconn *standby_conn, int id, char *cluster,
+getMasterConnection(PGconn *standby_conn, char *schema, int id, char *cluster,
                     int *master_id, char *master_conninfo_out)
 {
 	PGconn		*master_conn	 = NULL;
@@ -289,7 +289,6 @@ getMasterConnection(PGconn *standby_conn, int id, char *cluster,
 	char		 sqlquery[QUERY_STR_LEN];
 	char		 master_conninfo_stack[MAXCONNINFO];
 	char		*master_conninfo = &*master_conninfo_stack;
-	char		 schema_str[MAXLEN];
 	char		 schema_quoted[MAXLEN];
 
 	int		 i;
@@ -306,10 +305,9 @@ getMasterConnection(PGconn *standby_conn, int id, char *cluster,
 	 *
 	 * Assemble the unquoted schema name
 	 */
-	maxlen_snprintf(schema_str, "repmgr_%s", cluster);
 	{
-		char *identifier = PQescapeIdentifier(standby_conn, schema_str,
-		                                      strlen(schema_str));
+		char *identifier = PQescapeIdentifier(standby_conn, schema,
+		                                      strlen(schema));
 
 		maxlen_snprintf(schema_quoted, "%s", identifier);
 		PQfreemem(identifier);
