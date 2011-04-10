@@ -61,6 +61,6 @@ deb: repmgrd repmgr
 	mkdir -p ./debian/usr/lib/postgresql/9.0/lib/
 	cp sql/repmgr_funcs.so ./debian/usr/lib/postgresql/9.0/lib/
 	dpkg-deb --build debian
-	mv debian.deb ../postgresql-repmgr-auto-9.0_1.0.0.deb
+	mv debian.deb ../postgresql-repmgr-9.0_1.0.0.deb
 	rm -rf ./debian/usr
 
