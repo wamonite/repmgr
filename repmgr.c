@@ -1637,7 +1637,7 @@ copy_remote_files(char *host, char *remote_user, char *remote_path,
 	}
 	else
 	{
-		maxlen_snprintf(script, "rsync %s %s:%s %s/.",
+		maxlen_snprintf(script, "rsync %s %s:%s %s",
 		                rsync_flags, host_string, remote_path, local_path);
 	}
 
@@ -1787,7 +1787,7 @@ check_parameters_for_action(const int action)
 		 * repmgr.conf is useless because we don't have a server running in
 		 * the standby; warn the user, but keep going.
 		 */
-		if (runtime_options.host[0])
+		if (!runtime_options.host[0])
 		{
 			log_notice(_("You need to use connection parameters to "
 			           "the master when issuing a STANDBY CLONE command."));
