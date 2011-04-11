@@ -18,8 +18,9 @@
  */
 
 #include "config.h"
-#include "repmgr.h"
+#include "log.h"
 #include "strutil.h"
+#include "repmgr.h"
 
 void
 parse_config(const char *config_file, t_configuration_options *options)
@@ -79,9 +80,9 @@ parse_config(const char *config_file, t_configuration_options *options)
 			strncpy(failoverstr, value, MAXLEN);
 
 			if (strcmp(failoverstr, "manual") == 0)
-				*failover = MANUAL_FAILOVER;
+				options->failover = MANUAL_FAILOVER;
 			else if (strcmp(failoverstr, "automatic") == 0)
-				*failover = AUTOMATIC_FAILOVER;
+				options->failover = AUTOMATIC_FAILOVER;
 			else
 			{
 				log_warning(_("value for failover option is incorrect, it should be automatic or manual. Defaulting to manual.\n"));
@@ -95,7 +96,7 @@ parse_config(const char *config_file, t_configuration_options *options)
 		else if (strcmp(name, "follow_command") == 0)
 			strncpy(options->follow_command, value, MAXLEN);
 		else
-			log_warning(_("%s/%s: Unknown name/value pair!\n", name, value));
+			log_warning(_("%s/%s: Unknown name/value pair!\n"), name, value);
 	}
 
 	/* Close file */
@@ -171,7 +172,7 @@ parse_line(char *buff, char *name, char *value)
 }
 
 
-bool reload_configuration(char *config_file, t_configuration_options *orig_options);
+bool reload_configuration(char *config_file, t_configuration_options *orig_options)
 {
 	PGconn	*conn;
 
@@ -221,8 +222,8 @@ bool reload_configuration(char *config_file, t_configuration_options *orig_optio
 	strcpy(orig_options->conninfo, new_options.conninfo);
 	orig_options->failover = new_options.failover;
 	orig_options->priority = new_options.priority;
-	strcpy(orig_options->promote, new_options.promote);
-	strcpy(orig_options->follow, new_options.follow);
+	strcpy(orig_options->promote_command, new_options.promote_command);
+	strcpy(orig_options->follow_command, new_options.follow_command);
 	strcpy(orig_options->rsync_options, new_options.rsync_options);
 /*
  * These ones can change with a simple SIGHUP?

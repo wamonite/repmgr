@@ -97,14 +97,14 @@ is_witness(PGconn *conn, char *schema, char *cluster, int node_id)
 {
 	PGresult   *res;
 	bool		result;
-	char		sqlquery[MAXQUERY];
+	char		sqlquery[QUERY_STR_LEN];
 
 	sqlquery_snprintf(sqlquery, "SELECT witness from %s.repl_nodes where cluster = '%s' and id = %d",
 								 schema, cluster, node_id);
 	res = PQexec(conn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		log_err(_("Can't query server mode: %s", PQerrorMessage(conn)));
+		log_err(_("Can't query server mode: %s"), PQerrorMessage(conn));
 		PQclear(res);
 		PQfinish(conn);
 		exit(ERR_DB_QUERY);
@@ -125,7 +125,7 @@ bool
 is_pgup(PGconn *conn)
 {
 	PGresult   *res;
-	char		sqlquery[MAXQUERY];
+	char		sqlquery[QUERY_STR_LEN];
 	/* Check the connection status twice in case it changes after reset */
 	bool		twice = false;
 
@@ -152,7 +152,7 @@ is_pgup(PGconn *conn)
 			// we need to retry, because we might just have loose the connection once
 			if (PQresultStatus(res) != PGRES_TUPLES_OK)
 			{
-				log_err(_("PQexec failed: %s\n", PQerrorMessage(conn)));
+				log_err(_("PQexec failed: %s\n"), PQerrorMessage(conn));
 				PQclear(res);
 				if (twice)
 					return false;

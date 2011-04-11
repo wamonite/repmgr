@@ -162,8 +162,8 @@ main(int argc, char **argv)
 	parse_config(config_file, &local_options);
 	if (local_options.node == -1)
 	{
-		log_err("Node information is missing. "
-		        "Check the configuration file, or provide one if you have not done so.\n");
+		log_err(_("Node information is missing. "
+		        "Check the configuration file, or provide one if you have not done so.\n"));
 		exit(ERR_BAD_CONFIG);
 	}
 
@@ -257,7 +257,7 @@ main(int argc, char **argv)
 			/* I need the id of the primary as well as a connection to it */
 			log_info(_("%s Connecting to primary for cluster '%s'\n"),
 			         progname, local_options.cluster_name);
-			primaryConn = getMasterConnection(myLocalConn, local_options.node, 
+			primaryConn = getMasterConnection(myLocalConn, repmgr_schema, local_options.node, 
 											  local_options.cluster_name, 
 											  &primary_options.node, NULL);
 			if (primaryConn == NULL)
@@ -302,7 +302,7 @@ main(int argc, char **argv)
 			/* I need the id of the primary as well as a connection to it */
 			log_info(_("%s Connecting to primary for cluster '%s'\n"),
 			         progname, local_options.cluster_name);
-			primaryConn = getMasterConnection(myLocalConn, local_options.node,
+			primaryConn = getMasterConnection(myLocalConn, repmgr_schema, local_options.node,
 			                                  local_options.cluster_name,
 		    	                              &primary_options.node, NULL);
 			if (primaryConn == NULL)
@@ -343,7 +343,7 @@ main(int argc, char **argv)
 			}
 			break;
 		default:
-			log_err(_("%s: Unrecognized mode for node %d", progname, local_options.node));
+			log_err(_("%s: Unrecognized mode for node %d"), progname, local_options.node);
 	}
 
 	/* Prevent a double-free */
@@ -398,7 +398,7 @@ WitnessMonitor(void)
 	res = PQexec(myLocalConn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		log_err(_("PQexec failed: %s\n", PQerrorMessage(myLocalConn)));
+		log_err(_("PQexec failed: %s\n"), PQerrorMessage(myLocalConn));
 		PQclear(res);
 		/* if there is any error just let it be and retry in next loop */
 		return;
@@ -422,8 +422,8 @@ WitnessMonitor(void)
 	 * will check the result next time we pause for a monitor step.
 	 */
 	if (PQsendQuery(primaryConn, sqlquery) == 0)
-		log_warning(_("Query could not be sent to primary. %s\n",
-		        PQerrorMessage(primaryConn)));
+		log_warning(_("Query could not be sent to primary. %s\n"),
+		        PQerrorMessage(primaryConn));
 }
 
 
@@ -460,7 +460,7 @@ StandbyMonitor(void)
 			log_err(_("We couldn't reconnect to master. Now checking if another node has been promoted.\n"));
 			for (connection_retries = 0; connection_retries < 6; connection_retries++)
 			{
-				primaryConn = getMasterConnection(myLocalConn, local_options.node,
+				primaryConn = getMasterConnection(myLocalConn, repmgr_schema, local_options.node,
 			                                  local_options.cluster_name, &primary_options.node, NULL);
 				if (PQstatus(primaryConn) == CONNECTION_OK)
 				{
@@ -517,7 +517,7 @@ StandbyMonitor(void)
 	res = PQexec(myLocalConn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		log_err("PQexec failed: %s\n", PQerrorMessage(myLocalConn));
+		log_err(_("PQexec failed: %s\n"), PQerrorMessage(myLocalConn));
 		PQclear(res);
 		/* if there is any error just let it be and retry in next loop */
 		return;
@@ -534,7 +534,7 @@ StandbyMonitor(void)
 	res = PQexec(primaryConn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		log_err("PQexec failed: %s\n", PQerrorMessage(primaryConn));
+		log_err(_("PQexec failed: %s\n"), PQerrorMessage(primaryConn));
 		PQclear(res);
 		return;
 	}
@@ -566,7 +566,7 @@ StandbyMonitor(void)
 	 * will check the result next time we pause for a monitor step.
 	 */
 	if (PQsendQuery(primaryConn, sqlquery) == 0)
-		log_warning("Query could not be sent to primary. %s\n",
+		log_warning(_("Query could not be sent to primary. %s\n"),
 		            PQerrorMessage(primaryConn));
 }
 
@@ -605,7 +605,7 @@ do_failover(void)
 	res1 = PQexec(myLocalConn, sqlquery);
 	if (PQresultStatus(res1) != PGRES_TUPLES_OK)
 	{
-		log_err(_("PQexec failed: %s.\nReport an invalid value to not be considered as new primary and exit.\n", PQerrorMessage(myLocalConn)));
+		log_err(_("PQexec failed: %s.\nReport an invalid value to not be considered as new primary and exit.\n"), PQerrorMessage(myLocalConn));
 		PQclear(res1);
 		sprintf(last_wal_standby_applied, "'%X/%X'", 0, 0);
 		update_shared_memory(last_wal_standby_applied);
@@ -632,10 +632,10 @@ do_failover(void)
      res1 = PQexec(myLocalConn, sqlquery);
      if (PQresultStatus(res1) != PGRES_TUPLES_OK)
      {
-         log_err(_("Can't get nodes info: %s", PQerrorMessage(myLocalConn)));
+         log_err(_("Can't get nodes info: %s"), PQerrorMessage(myLocalConn));
          PQclear(res1);
          PQfinish(myLocalConn);
- 		exit(ERR_BAD_QUERY);
+ 		exit(ERR_DB_QUERY);
      }
  
  	/* ask for the locations */
@@ -654,8 +654,8 @@ do_failover(void)
      	res2 = PQexec(nodeConn, sqlquery);
      	if (PQresultStatus(res2) != PGRES_TUPLES_OK)
      	{
-     	    log_info(_("Can't get node's last standby location: %s", PQerrorMessage(nodeConn)));
-			log_info(_("Connection details: %s", nodeConninfo));
+     	    log_info(_("Can't get node's last standby location: %s"), PQerrorMessage(nodeConn));
+			log_info(_("Connection details: %s"), nodeConninfo);
      	    PQclear(res2);
          	PQfinish(nodeConn);
  			continue;
@@ -664,7 +664,7 @@ do_failover(void)
 		visible_nodes++;
 
 		if (sscanf(PQgetvalue(res2, 0, 0), "%X/%X", &uxlogid, &uxrecoff) != 2)
-			log_info(_("could not parse transaction log location \"%s\"", PQgetvalue(res2, 0, 0)));
+			log_info(_("could not parse transaction log location \"%s\""), PQgetvalue(res2, 0, 0));
 
  		nodes[i].nodeId = node;
  		nodes[i].xlog_location.xlogid = uxlogid;
@@ -729,24 +729,26 @@ do_failover(void)
 	if (best_candidate.nodeId == myLocalId)
 	{
 		if (verbose)
-			log_info(_("%s: This node is the best candidate to be the new primary, promoting...", 
-					progname));
-	 	r = system(promote_command);
+			log_info(_("%s: This node is the best candidate to be the new primary, promoting..."), 
+					progname);
+		log_debug(_("promote command is: \"%s\""), local_options.promote_command);
+	 	r = system(local_options.promote_command);
 		if (r != 0)
 		{
-			log_err(_("%s: promote command failed. You could check and try it manually.\n", progname));
+			log_err(_("%s: promote command failed. You could check and try it manually.\n"), progname);
 			exit(ERR_BAD_CONFIG);
 		}
 	}
 	else
 	{
 		if (verbose)
-			log_info(_("%s: Node %d is the best candidate to be the new primary, we should follow it...", 
-					progname, best_candidate.nodeId));
-		r = system(follow_command);
+			log_info(_("%s: Node %d is the best candidate to be the new primary, we should follow it..."), 
+					progname, best_candidate.nodeId);
+		log_debug(_("follow command is: \"%s\""), local_options.follow_command);
+		r = system(local_options.follow_command);
 		if (r != 0)
 		{
-			log_err(_("%s: follow command failed. You could check and try it manually.\n", progname));
+			log_err(_("%s: follow command failed. You could check and try it manually.\n"), progname);
 			exit(ERR_BAD_CONFIG);
 		}
 	}
@@ -771,19 +773,19 @@ CheckPrimaryConnection(void)
 	{
 		if (!is_pgup(primaryConn))
 		{
-			log_warning(_("\n%s: Connection to master has been lost, trying to recover... %i seconds before failover decision\n", progname, (SLEEP_RETRY*(NUM_RETRY-connection_retries))));
+			log_warning(_("\n%s: Connection to master has been lost, trying to recover... %i seconds before failover decision\n"), progname, (SLEEP_RETRY*(NUM_RETRY-connection_retries)));
 			/* wait SLEEP_RETRY seconds between retries */
 			sleep(SLEEP_RETRY);
 		}
 		else
 		{
-			log_info(_("\n%s: Connection to master has been restored.\n", progname));
+			log_info(_("\n%s: Connection to master has been restored.\n"), progname);
 			break;
 		}
 	}
 	if (!is_pgup(primaryConn))
 	{
-		log_err(_("\n%s: We couldn't reconnect for long enough, exiting...\n", progname));
+		log_err(_("\n%s: We couldn't reconnect for long enough, exiting...\n"), progname);
 		/* XXX Anything else to do here? */
 		return false;
 	}
@@ -804,7 +806,7 @@ checkClusterConfiguration(PGconn *conn, PGconn *primary)
 	res = PQexec(conn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		log_err("PQexec failed: %s\n", PQerrorMessage(conn));
+		log_err(_("PQexec failed: %s\n"), PQerrorMessage(conn));
 		PQclear(res);
 		CloseConnections();
 		exit(ERR_DB_QUERY);
@@ -819,7 +821,7 @@ checkClusterConfiguration(PGconn *conn, PGconn *primary)
 	 */
 	if (PQntuples(res) == 0)
 	{
-		log_err("The replication cluster is not configured\n");
+		log_err(_("The replication cluster is not configured\n"));
 		PQclear(res);
 		CloseConnections();
 		exit(ERR_BAD_CONFIG);
@@ -846,7 +848,7 @@ checkNodeConfiguration(char *conninfo)
 	res = PQexec(myLocalConn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		log_err("PQexec failed: %s\n", PQerrorMessage(myLocalConn));
+		log_err(_("PQexec failed: %s\n"), PQerrorMessage(myLocalConn));
 		PQclear(res);
 		CloseConnections();
 		exit(ERR_BAD_CONFIG);
@@ -879,7 +881,7 @@ checkNodeConfiguration(char *conninfo)
 
 		if (!PQexec(primaryConn, sqlquery))
 		{
-			log_err("Cannot insert node details, %s\n",
+			log_err(_("Cannot insert node details, %s\n"),
 			        PQerrorMessage(primaryConn));
 			CloseConnections();
 			exit(ERR_BAD_CONFIG);
@@ -897,7 +899,7 @@ walLocationToBytes(char *wal_location)
 
 	if (sscanf(wal_location, "%X/%X", &xlogid, &xrecoff) != 2)
 	{
-		log_err("wrong log location format: %s\n", wal_location);
+		log_err(_("wrong log location format: %s\n"), wal_location);
 		return 0;
 	}
 	return (( (long long) xlogid * 16 * 1024 * 1024 * 255) + xrecoff);
@@ -957,7 +959,7 @@ CancelQuery(void)
 	pgcancel = PQgetCancel(primaryConn);
 
 	if (!pgcancel || PQcancel(pgcancel, errbuf, ERRBUFF_SIZE) == 0)
-		log_warning("Can't stop current query: %s\n", errbuf);
+		log_warning(_("Can't stop current query: %s\n"), errbuf);
 
 	PQfreeCancel(pgcancel);
 }
@@ -975,7 +977,7 @@ update_shared_memory(char *last_wal_standby_applied)
 	res = PQexec(myLocalConn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		log_warning(_("Cannot update this standby's shared memory: %s", PQerrorMessage(myLocalConn)));
+		log_warning(_("Cannot update this standby's shared memory: %s"), PQerrorMessage(myLocalConn));
 		/* XXX is this enough reason to terminate this repmgrd? */
 	}
 	PQclear(res);
@@ -995,7 +997,7 @@ update_registration(void)
 	res = PQexec(primaryConn, sqlquery);
 	if (PQresultStatus(res) != PGRES_COMMAND_OK)
 	{
-		log_err(_("Cannot update registration: %s", PQerrorMessage(primaryConn)));
+		log_err(_("Cannot update registration: %s"), PQerrorMessage(primaryConn));
 		CloseConnections();
 		exit(ERR_DB_CON);
 	}

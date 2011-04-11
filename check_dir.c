@@ -222,6 +222,7 @@ mkdir_p(char *path, mode_t omode)
 bool
 is_pg_dir(char *dir)
 {
+	struct stat sb;
 	char	path_c[8192];
 	int		r;
 
