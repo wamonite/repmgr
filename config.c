@@ -172,7 +172,8 @@ parse_line(char *buff, char *name, char *value)
 }
 
 
-bool reload_configuration(char *config_file, t_configuration_options *orig_options)
+bool
+reload_configuration(char *config_file, t_configuration_options *orig_options)
 {
 	PGconn	*conn;
 
@@ -203,7 +204,7 @@ bool reload_configuration(char *config_file, t_configuration_options *orig_optio
 
 	if (new_options.failover != MANUAL_FAILOVER && new_options.failover != AUTOMATIC_FAILOVER)
 	{
-		log_warning(_("\nNew value for failover is not valid. Should be manual or automatic.\n"));
+		log_warning(_("\nNew value for failover is not valid. Should be MANUAL or AUTOMATIC.\n"));
 		return false;
 	}
 
@@ -226,7 +227,7 @@ bool reload_configuration(char *config_file, t_configuration_options *orig_optio
 	strcpy(orig_options->follow_command, new_options.follow_command);
 	strcpy(orig_options->rsync_options, new_options.rsync_options);
 /*
- * These ones can change with a simple SIGHUP?
+ * XXX These ones can change with a simple SIGHUP?
 
 	strcpy (orig_options->loglevel, new_options.loglevel);
 	strcpy (orig_options->logfacility, new_options.logfacility);
