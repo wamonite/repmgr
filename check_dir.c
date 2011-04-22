@@ -31,8 +31,6 @@
 #include "strutil.h"
 #include "log.h"
 
-static int mkdir_p(char *path, mode_t omode);
-
 /*
  * make sure the directory either doesn't exist or is empty
  * we use this function to check the new data directory and
