@@ -609,6 +609,8 @@ do_standby_register(void)
 	log_info(_("%s registering the standby complete\n"), progname);
 	PQfinish(master_conn);
 	PQfinish(conn);
+	log_notice(_("Standby node correctly registered for cluster %s with id %d (conninfo: %s)\n"),
+	           options.cluster_name, options.node, options.conninfo);
 	return;
 }
 
