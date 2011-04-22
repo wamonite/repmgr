@@ -247,13 +247,13 @@ main(int argc, char **argv)
 						PQfinish(myLocalConn);
 						myLocalConn = establishDBConnection(local_options.conninfo, true);
 						update_registration();
-						got_SIGHUP = false;
 					}
 					got_SIGHUP = false;
 				}
 			}
 			break;
 		case WITNESS_MODE:
+		case STANDBY_MODE:
 			/* I need the id of the primary as well as a connection to it */
 			log_info(_("%s Connecting to primary for cluster '%s'\n"),
 			         progname, local_options.cluster_name);
@@ -277,56 +277,23 @@ main(int argc, char **argv)
 			}
 
 			/*
-			 * Every SLEEP_MONITOR seconds, do witness checks
+			 * Every SLEEP_MONITOR seconds, do checks
 			 */
-			log_info(_("%s Starting continuous witness node monitoring\n"), progname);
+			if (myLocalMode == WITNESS_MODE)
+			{
+				log_info(_("%s Starting continuous witness node monitoring\n"), progname);
+			}
+			else if (myLocalMode == STANDBY_MODE)
+			{
+				log_info(_("%s Starting continuous standby node monitoring\n"), progname);
+			}
+
 			for (;;)
 			{
-				WitnessMonitor();
-				sleep(SLEEP_MONITOR);
-
-				if (got_SIGHUP)
-				{
-					/* if we can reload, then could need to change myLocalConn */
-					if (reload_configuration(config_file, &local_options))
-					{
-						PQfinish(myLocalConn);
-						myLocalConn = establishDBConnection(local_options.conninfo, true);
-						update_registration();
-					}
-					got_SIGHUP = false;
-				}
-			}
-			break;
-		case STANDBY_MODE:
-			/* I need the id of the primary as well as a connection to it */
-			log_info(_("%s Connecting to primary for cluster '%s'\n"),
-			         progname, local_options.cluster_name);
-			primaryConn = getMasterConnection(myLocalConn, repmgr_schema, local_options.node,
-			                                  local_options.cluster_name,
-		    	                              &primary_options.node, NULL);
-			if (primaryConn == NULL)
-			{
-				CloseConnections();
-				exit(ERR_BAD_CONFIG);
-			}
-
-			checkClusterConfiguration(myLocalConn, primaryConn);
-			checkNodeConfiguration(local_options.conninfo);
-
-			if (reload_configuration(config_file, &local_options))
-			{
-				PQfinish(myLocalConn);
-				myLocalConn = establishDBConnection(local_options.conninfo, true);
-				update_registration();
-			}
-			/*
-			 * Every SLEEP_MONITOR seconds, insert monitor info
-			 */
-			log_info(_("%s Starting continuous standby node monitoring\n"), progname);
-			for (;;)
-			{
-				StandbyMonitor();
+				if (myLocalMode == WITNESS_MODE)
+					WitnessMonitor();
+				else if (myLocalMode == STANDBY_MODE)
+					StandbyMonitor();
 				sleep(SLEEP_MONITOR);
 
 				if (got_SIGHUP)

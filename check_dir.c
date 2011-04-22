@@ -122,7 +122,7 @@ set_directory_permissions(char *dir)
  * note that on failure, the path arg has been modified to show the particular
  * directory level we had problems with.
  */
-static int
+int
 mkdir_p(char *path, mode_t omode)
 {
 	struct stat sb;
