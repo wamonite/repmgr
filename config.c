@@ -178,7 +178,7 @@ reload_configuration(char *config_file, t_configuration_options *orig_options)
 	PGconn	*conn;
 
 	t_configuration_options new_options;
-						
+
 	/*
 	 * Re-read the configuration file: repmgr.conf
 	 */
@@ -226,12 +226,12 @@ reload_configuration(char *config_file, t_configuration_options *orig_options)
 	strcpy(orig_options->promote_command, new_options.promote_command);
 	strcpy(orig_options->follow_command, new_options.follow_command);
 	strcpy(orig_options->rsync_options, new_options.rsync_options);
-/*
- * XXX These ones can change with a simple SIGHUP?
+	/*
+	 * XXX These ones can change with a simple SIGHUP?
 
-	strcpy (orig_options->loglevel, new_options.loglevel);
-	strcpy (orig_options->logfacility, new_options.logfacility);
-*/
+		strcpy (orig_options->loglevel, new_options.loglevel);
+		strcpy (orig_options->logfacility, new_options.logfacility);
+	*/
 
 	return true;
 }

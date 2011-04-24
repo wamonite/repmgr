@@ -30,8 +30,8 @@ typedef struct
 	char conninfo[MAXLEN];
 	int failover;
 	int priority;
-	char promote_command[MAXLEN]; 
-	char follow_command[MAXLEN]; 
+	char promote_command[MAXLEN];
+	char follow_command[MAXLEN];
 	char loglevel[MAXLEN];
 	char logfacility[MAXLEN];
 	char rsync_options[QUERY_STR_LEN];

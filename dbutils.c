@@ -100,7 +100,7 @@ is_witness(PGconn *conn, char *schema, char *cluster, int node_id)
 	char		sqlquery[QUERY_STR_LEN];
 
 	sqlquery_snprintf(sqlquery, "SELECT witness from %s.repl_nodes where cluster = '%s' and id = %d",
-								 schema, cluster, node_id);
+	                  schema, cluster, node_id);
 	res = PQexec(conn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{

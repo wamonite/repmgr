@@ -6,7 +6,7 @@
  * hot standby servers for an HA environment
  *
  * Commands implemented are.
- * MASTER REGISTER 
+ * MASTER REGISTER
  * STANDBY REGISTER, STANDBY CLONE, STANDBY FOLLOW, STANDBY PROMOTE
  * WITNESS CREATE
  *
@@ -186,7 +186,7 @@ main(int argc, char **argv)
 	{
 		server_mode = argv[optind++];
 		if (strcasecmp(server_mode, "STANDBY") != 0 && strcasecmp(server_mode, "MASTER") != 0 &&
-			strcasecmp(server_mode, "WITNESS") != 0) 
+		        strcasecmp(server_mode, "WITNESS") != 0)
 		{
 			usage();
 			exit(ERR_BAD_CONFIG);
@@ -217,7 +217,7 @@ main(int argc, char **argv)
 			if (strcasecmp(server_cmd, "CREATE") == 0)
 				action = WITNESS_CREATE;
 	}
-	
+
 	if (action == NO_ACTION)
 	{
 		usage();
@@ -306,7 +306,7 @@ main(int argc, char **argv)
 		if (options.node == -1)
 		{
 			log_err(_("Node information is missing. "
-			        "Check the configuration file.\n"));
+			          "Check the configuration file.\n"));
 			exit(ERR_BAD_CONFIG);
 		}
 	}
@@ -877,7 +877,8 @@ do_standby_clone(void)
 		goto stop_backup;
 	}
 	r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
-	                      master_control_file, local_control_file, false);
+	                      master_control_file, local_control_file,
+	                      false);
 	if (r != 0)
 	{
 		log_warning(_("standby clone: failed copying master control file '%s'\n"), master_control_file);
@@ -886,7 +887,8 @@ do_standby_clone(void)
 
 	log_info(_("standby clone: master data directory '%s'\n"), master_data_directory);
 	r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
-	                      master_data_directory, local_data_directory, true);
+	                      master_data_directory, local_data_directory,
+	                      true);
 	if (r != 0)
 	{
 		log_warning(_("standby clone: failed copying master data directory '%s'\n"), master_data_directory);
@@ -917,7 +919,8 @@ do_standby_clone(void)
 		strncpy(tblspc_dir, PQgetvalue(res, i, 0), MAXFILENAME);
 		log_info(_("standby clone: master tablespace '%s'\n"), tblspc_dir);
 		r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
-		                      tblspc_dir, tblspc_dir, true);
+		                      tblspc_dir, tblspc_dir,
+		                      true);
 		if (r != 0)
 		{
 			log_warning(_("standby clone: failed copying tablespace directory '%s'\n"), tblspc_dir);
@@ -927,7 +930,8 @@ do_standby_clone(void)
 
 	log_info(_("standby clone: master config file '%s'\n"), master_config_file);
 	r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
-						  master_config_file, local_config_file, false);
+	                      master_config_file, local_config_file,
+	                      false);
 	if (r != 0)
 	{
 		log_warning(_("standby clone: failed copying master config file '%s'\n"), master_config_file);
@@ -935,7 +939,9 @@ do_standby_clone(void)
 	}
 
 	log_info(_("standby clone: master hba file '%s'\n"), master_hba_file);
-	r = copy_remote_files(runtime_options.host, runtime_options.remote_user, master_hba_file, local_hba_file, false);
+	r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
+	                      master_hba_file, local_hba_file,
+	                      false);
 	if (r != 0)
 	{
 		log_warning(_("standby clone: failed copying master hba file '%s'\n"), master_hba_file);
@@ -944,7 +950,8 @@ do_standby_clone(void)
 
 	log_info(_("standby clone: master ident file '%s'\n"), master_ident_file);
 	r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
-						  master_ident_file, local_ident_file, false);
+	                      master_ident_file, local_ident_file,
+	                      false);
 	if (r != 0)
 	{
 		log_warning(_("standby clone: failed copying master ident file '%s'\n"), master_ident_file);
@@ -996,8 +1003,8 @@ stop_backup:
 	/* If the rsync failed then exit */
 	if (r != 0)
 	{
-		log_err(_("Couldn't rsync the master...\nYou have to cleanup the destination directory (%s) manually!\n"), 
-				 runtime_options.dest_dir);
+		log_err(_("Couldn't rsync the master...\nYou have to cleanup the destination directory (%s) manually!\n"),
+		        runtime_options.dest_dir);
 		exit(ERR_BAD_RSYNC);
 	}
 
@@ -1345,9 +1352,9 @@ do_witness_create(void)
 		return;
 	}
 
-	/* 
-	 * default port for the witness is 5499, 
-	 * but user can provide a different one 
+	/*
+	 * default port for the witness is 5499,
+	 * but user can provide a different one
 	 */
 	snprintf(buf, sizeof(buf), "%s/postgresql.conf", runtime_options.dest_dir);
 	pg_conf = fopen(buf, "a");
@@ -1367,7 +1374,7 @@ do_witness_create(void)
 
 	snprintf(buf, sizeof(buf), "shared_preload_libraries = 'repmgr_funcs'\n") ;
 	fputs(buf, pg_conf);
-	
+
 	snprintf(buf, sizeof(buf), "listen_addresses = '*'\n") ;
 	fputs(buf, pg_conf);
 
@@ -1393,8 +1400,10 @@ do_witness_create(void)
 			fprintf(stderr, _("uknown parameter: %s"), PQgetvalue(res, i, 0));
 	}
 	PQclear(res);
-	
-	r = copy_remote_files(runtime_options.host, runtime_options.remote_user, master_hba_file, runtime_options.dest_dir, false);
+
+	r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
+	                      master_hba_file, runtime_options.dest_dir,
+	                      false);
 	if (r != 0)
 	{
 		fprintf(stderr, "[ERROR]: Can't rsync the pg_hba.conf file from master\n");
@@ -1412,8 +1421,8 @@ do_witness_create(void)
 
 	/* register ourselves in the master */
 	sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes(id, cluster, conninfo, priority, witness) "
-	        "VALUES (%d, '%s', '%s', %d, true)",
-	        repmgr_schema, options.node, options.cluster_name, options.conninfo);
+	                  "VALUES (%d, '%s', '%s', %d, true)",
+	                  repmgr_schema, options.node, options.cluster_name, options.conninfo);
 
 	if (!PQexec(masterconn, sqlquery))
 	{
@@ -1463,7 +1472,7 @@ do_witness_create(void)
 		return;
 	}
 
-	/* copy configuration from master, only repl_nodes is needed */	
+	/* copy configuration from master, only repl_nodes is needed */
 	if (!copy_configuration(masterconn, witnessconn))
 	{
 		PQfinish(masterconn);
@@ -1777,9 +1786,9 @@ check_parameters_for_action(const int action)
 		if (runtime_options.config_file[0])
 		{
 			log_notice(_("Only command line parameters for the connection "
-			           "to the master are used when issuing a STANDBY CLONE command. "
-			           "The passed configuration file is neither required nor used for "
-			           "its node configuration portions\n\n"));
+			             "to the master are used when issuing a STANDBY CLONE command. "
+			             "The passed configuration file is neither required nor used for "
+			             "its node configuration portions\n\n"));
 		}
 		/*
 		 * To clone a master into a standby we need connection parameters
@@ -1789,7 +1798,7 @@ check_parameters_for_action(const int action)
 		if (!runtime_options.host[0])
 		{
 			log_notice(_("You need to use connection parameters to "
-			           "the master when issuing a STANDBY CLONE command."));
+			             "the master when issuing a STANDBY CLONE command."));
 			ok = false;
 		}
 		need_a_node = false;
@@ -1823,9 +1832,9 @@ create_schema(PGconn *conn)
 	sqlquery_snprintf(sqlquery, "CREATE TABLE %s.repl_nodes (        "
 	                  "  id        integer primary key, "
 	                  "  cluster   text    not null,    "
-	                  "  conninfo  text    not null,    " 
-					  "  priority  integer not null,    "
-					  "  witness   boolean not null default false)", repmgr_schema);
+	                  "  conninfo  text    not null,    "
+	                  "  priority  integer not null,    "
+	                  "  witness   boolean not null default false)", repmgr_schema);
 	log_debug(_("master register: %s\n"), sqlquery);
 	if (!PQexec(conn, sqlquery))
 	{
@@ -1873,9 +1882,9 @@ create_schema(PGconn *conn)
 
 	/* XXX Here we MUST try to load the repmgr_function.sql not hardcode it here */
 	sprintf(sqlquery,
-			"CREATE OR REPLACE FUNCTION public.repmgr_update_standby_location(text) RETURNS boolean "
-			"AS '$libdir/repmgr_funcs', 'repmgr_update_standby_location' "
-			"LANGUAGE C STRICT ");
+	        "CREATE OR REPLACE FUNCTION public.repmgr_update_standby_location(text) RETURNS boolean "
+	        "AS '$libdir/repmgr_funcs', 'repmgr_update_standby_location' "
+	        "LANGUAGE C STRICT ");
 	if (!PQexec(conn, sqlquery))
 	{
 		fprintf(stderr, "Cannot create the function repmgr_update_standby_location: %s\n",
@@ -1884,9 +1893,9 @@ create_schema(PGconn *conn)
 	}
 
 	sprintf(sqlquery,
-			"CREATE OR REPLACE FUNCTION public.repmgr_get_last_standby_location() RETURNS text "
-			"AS '$libdir/repmgr_funcs', 'repmgr_get_last_standby_location' "
-			"LANGUAGE C STRICT ");
+	        "CREATE OR REPLACE FUNCTION public.repmgr_get_last_standby_location() RETURNS text "
+	        "AS '$libdir/repmgr_funcs', 'repmgr_get_last_standby_location' "
+	        "LANGUAGE C STRICT ");
 	if (!PQexec(conn, sqlquery))
 	{
 		fprintf(stderr, "Cannot create the function repmgr_get_last_standby_location: %s\n",
@@ -1898,7 +1907,7 @@ create_schema(PGconn *conn)
 }
 
 
-static bool 
+static bool
 copy_configuration(PGconn *masterconn, PGconn *witnessconn)
 {
 	char		sqlquery[MAXLEN];
@@ -1917,20 +1926,20 @@ copy_configuration(PGconn *masterconn, PGconn *witnessconn)
 	res = PQexec(masterconn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		fprintf(stderr, "Can't get configuration from master: %s\n", 
-				PQerrorMessage(masterconn));
+		fprintf(stderr, "Can't get configuration from master: %s\n",
+		        PQerrorMessage(masterconn));
 		PQclear(res);
 		return false;
 	}
 	for (i = 0; i < PQntuples(res); i++)
 	{
 		sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes(id, cluster, conninfo, priority, witness) "
-						  "VALUES (%d, '%s', '%s', %d, '%s')",
-								repmgr_schema, atoi(PQgetvalue(res, i, 0)), 
-								options.cluster_name, PQgetvalue(res, i, 2), 
-								atoi(PQgetvalue(res, i, 3)), 
-								PQgetvalue(res, i, 4));
-	
+		                  "VALUES (%d, '%s', '%s', %d, '%s')",
+		                  repmgr_schema, atoi(PQgetvalue(res, i, 0)),
+		                  options.cluster_name, PQgetvalue(res, i, 2),
+		                  atoi(PQgetvalue(res, i, 3)),
+		                  PQgetvalue(res, i, 4));
+
 		if (!PQexec(witnessconn, sqlquery))
 		{
 			fprintf(stderr, "Cannot copy configuration to witness, %s\n",

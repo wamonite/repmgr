@@ -254,7 +254,7 @@ create_pgdir(char *dir, bool force)
 		if (!create_directory(dir))
 		{
 			log_err(_("couldn't create directory \"%s\"...\n"),
-					dir);
+			        dir);
 			exit(ERR_BAD_CONFIG);
 		}
 		break;
@@ -266,14 +266,14 @@ create_pgdir(char *dir, bool force)
 		if (!set_directory_permissions(dir))
 		{
 			log_err(_("could not change permissions of directory \"%s\": %s\n"),
-			         dir, strerror(errno));
+			        dir, strerror(errno));
 			exit(ERR_BAD_CONFIG);
 		}
 		break;
 	case 2:
 		/* Present and not empty */
 		log_warning( _("directory \"%s\" exists but is not empty\n"),
-		              dir);
+		             dir);
 
 		pg_dir = is_pg_dir(dir);
 
