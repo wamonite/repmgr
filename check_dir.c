@@ -274,7 +274,7 @@ create_pgdir(char *dir, bool force)
 	case 2:
 		/* Present and not empty */
 		log_warning(_("directory \"%s\" exists but is not empty\n"),
-		             dir);
+		            dir);
 
 		pg_dir = is_pg_dir(dir);
 
@@ -290,9 +290,9 @@ create_pgdir(char *dir, bool force)
 		else if (pg_dir && !force)
 		{
 			log_warning(_("\nThis looks like a PostgreSQL directory.\n"
-			               "If you are sure you want to clone here, "
-			               "please check there is no PostgreSQL server "
-			               "running and use the --force option\n"));
+			              "If you are sure you want to clone here, "
+			              "please check there is no PostgreSQL server "
+			              "running and use the --force option\n"));
 			exit(ERR_BAD_CONFIG);
 		}
 
@@ -300,7 +300,7 @@ create_pgdir(char *dir, bool force)
 	default:
 		/* Trouble accessing directory */
 		log_err(_("could not access directory \"%s\": %s\n"),
-		         dir, strerror(errno));
+		        dir, strerror(errno));
 		exit(ERR_BAD_CONFIG);
 	}
 	return true;
