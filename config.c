@@ -18,9 +18,9 @@
  */
 
 #include "config.h"
-#include "log.h"
-#include "strutil.h"
 #include "repmgr.h"
+#include "strutil.h"
+#include "log.h"
 
 void
 parse_config(const char *config_file, t_configuration_options *options)
@@ -136,7 +136,6 @@ trim (char *s)
 	strcpy (s, s1);
 	return s;
 }
-
 
 void
 parse_line(char *buff, char *name, char *value)

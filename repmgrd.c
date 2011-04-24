@@ -57,6 +57,7 @@ PGconn *myLocalConn = NULL;
 
 /* Primary info */
 t_configuration_options primary_options;
+
 PGconn *primaryConn = NULL;
 
 char sqlquery[QUERY_STR_LEN];

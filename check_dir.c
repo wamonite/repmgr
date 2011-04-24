@@ -103,12 +103,12 @@ create_directory(char *dir)
 	return false;
 }
 
-
 bool
 set_directory_permissions(char *dir)
 {
 	return (chmod(dir, 0700) != 0) ? false : true;
 }
+
 
 
 /* function from initdb.c */
@@ -220,18 +220,19 @@ mkdir_p(char *path, mode_t omode)
 bool
 is_pg_dir(char *dir)
 {
-	struct stat sb;
-	char	path_c[8192];
+	const size_t buf_sz = 8192;
+	char		 path[buf_sz];
+	struct stat	 sb;
 	int		r;
 
 	// test pgdata
-	sprintf(path_c, "%s/PG_VERSION", dir);
-	if (stat(path_c, &sb) == 0)
+	xsnprintf(path, buf_sz, "%s/PG_VERSION", dir)
+	if (stat(path, &sb) == 0)
 		return true;
 
 	// test tablespace dir
-	sprintf(path_c, "ls %s/PG_9.0_*/ -I*", dir);
-	r = system(path_c);
+	sprintf(path, "ls %s/PG_9.0_*/ -I*", dir);
+	r = system(path);
 	if (r == 0)
 		return true;
 
@@ -272,7 +273,7 @@ create_pgdir(char *dir, bool force)
 		break;
 	case 2:
 		/* Present and not empty */
-		log_warning( _("directory \"%s\" exists but is not empty\n"),
+		log_warning(_("directory \"%s\" exists but is not empty\n"),
 		             dir);
 
 		pg_dir = is_pg_dir(dir);
@@ -288,7 +289,7 @@ create_pgdir(char *dir, bool force)
 		}
 		else if (pg_dir && !force)
 		{
-			log_warning( _("\nThis looks like a PostgreSQL directory.\n"
+			log_warning(_("\nThis looks like a PostgreSQL directory.\n"
 			               "If you are sure you want to clone here, "
 			               "please check there is no PostgreSQL server "
 			               "running and use the --force option\n"));
@@ -298,7 +299,7 @@ create_pgdir(char *dir, bool force)
 		return false;
 	default:
 		/* Trouble accessing directory */
-		log_err( _("could not access directory \"%s\": %s\n"),
+		log_err(_("could not access directory \"%s\": %s\n"),
 		         dir, strerror(errno));
 		exit(ERR_BAD_CONFIG);
 	}

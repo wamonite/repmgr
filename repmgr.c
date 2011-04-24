@@ -1004,13 +1004,12 @@ stop_backup:
 	if (r != 0)
 	{
 		log_err(_("Couldn't rsync the master...\nYou have to cleanup the destination directory (%s) manually!\n"),
-		        runtime_options.dest_dir);
+		        local_data_directory);
 		exit(ERR_BAD_RSYNC);
 	}
 
 	/*
-	 * We need to create the pg_xlog sub directory too, I'm reusing a variable
-	 * here.
+	 * We need to create the pg_xlog sub directory too.
 	 */
 	if (!create_directory(local_xlog_directory))
 	{
@@ -1125,7 +1124,6 @@ do_standby_promote(void)
 	 */
 	log_notice(_("%s: restarting server using pg_ctl\n"), progname);
 	maxlen_snprintf(script, "pg_ctl -D %s -w -m fast restart", data_dir);
-
 	r = system(script);
 	if (r != 0)
 	{
@@ -1795,7 +1793,7 @@ check_parameters_for_action(const int action)
 		 * repmgr.conf is useless because we don't have a server running in
 		 * the standby; warn the user, but keep going.
 		 */
-		if (!runtime_options.host[0])
+		if (runtime_options.host == NULL)
 		{
 			log_notice(_("You need to use connection parameters to "
 			             "the master when issuing a STANDBY CLONE command."));
