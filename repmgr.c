@@ -270,6 +270,10 @@ main(int argc, char **argv)
 	if (runtime_options.verbose)
 		printf(_("Opening configuration file: %s\n"), runtime_options.config_file);
 
+	/*
+	 * XXX Do not read config files for action where it is not required (clone
+	 * for example).
+	 */
 	parse_config(runtime_options.config_file, &options);
 
 	keywords[2] = "user";
@@ -624,32 +628,42 @@ do_standby_clone(void)
 
 	int			r = 0;
 	int			i;
-    bool		flag_success = false;
-	bool		flag_autoguess = false;
+	bool		flag_success = false;
+	bool		test_mode = false;
+
+	char		tblspc_dir[MAXFILENAME];
+
 	char		master_data_directory[MAXFILENAME];
-	char		master_config_file[MAXFILENAME];
-	char		master_hba_file[MAXFILENAME];
-	char		master_ident_file[MAXFILENAME];
+	char		local_data_directory[MAXFILENAME];
+	char		master_xlog_directory[MAXFILENAME];
+	char		local_xlog_directory[MAXFILENAME];
+	char		master_stats_temp_directory[MAXFILENAME];
+	char		local_stats_temp_directory[MAXFILENAME];
 
 	char		master_control_file[MAXFILENAME];
 	char		local_control_file[MAXFILENAME];
-	char		tblspc_dir[MAXFILENAME];
+	char		master_config_file[MAXFILENAME];
+	char		local_config_file[MAXFILENAME];
+	char		master_hba_file[MAXFILENAME];
+	char		local_hba_file[MAXFILENAME];
+	char		master_ident_file[MAXFILENAME];
+	char		local_ident_file[MAXFILENAME];
 
 	char		*first_wal_segment = NULL;
 	const char	*last_wal_segment  = NULL;
 
-	char	master_version[MAXVERSIONSTR];
+	char		master_version[MAXVERSIONSTR];
 
-	/* if dest_dir hasn't been provided, initialize to current directory */
-	if (!runtime_options.dest_dir[0])
+	/*
+	 * if dest_dir has been provided, we copy everything in the same path
+	 * if dest_dir is set and the master have tablespace, repmgr will stop
+	 * because it is more complex to remap the path for the tablespaces and it
+	 * does not look useful at the moment
+	 */
+	if (runtime_options.dest_dir[0])
 	{
-		strncpy(runtime_options.dest_dir, DEFAULT_DEST_DIR, MAXFILENAME);
-	}
-
-	/* Check this directory could be used as a PGDATA dir */
-	if (!create_pgdir(runtime_options.dest_dir, runtime_options.force))
-	{
-		return;
+		test_mode = true;
+		log_notice(_("%s Destination directory %s provided, try to clone everything in it.\n"), progname, runtime_options.dest_dir);
 	}
 
 	/* Connection parameters for master only */
@@ -700,8 +714,6 @@ do_standby_clone(void)
 		exit(ERR_BAD_CONFIG);
 	}
 
-	log_info(_("Succesfully connected to primary. Current installation size is %s\n"), get_cluster_size(conn));
-
 	/*
 	 * Check if the tablespace locations exists and that we can write to
 	 * them.
@@ -722,8 +734,20 @@ do_standby_clone(void)
 	}
 	for (i = 0; i < PQntuples(res); i++)
 	{
+		if (test_mode)
+		{
+			log_err("Can't clone in test mode when master have tablespace\n");
+			PQclear(res);
+			PQfinish(conn);
+			exit(ERR_BAD_CONFIG);
+		}
+
 		strncpy(tblspc_dir, PQgetvalue(res, i, 0), MAXFILENAME);
-		/* Check this directory could be used as a PGDATA dir */
+		/*
+		 * Check this directory could be used for tablespace
+		 * this will create the directory a bit too early
+		 * XXX build an array of tablespace to create later in the backup
+		 */
 		if (!create_pgdir(tblspc_dir, runtime_options.force))
 		{
 			PQclear(res);
@@ -732,13 +756,11 @@ do_standby_clone(void)
 		}
 	}
 
-	log_notice(_("Starting backup...\n"));
-
 	/* Get the data directory full path and the configuration files location */
 	sqlquery_snprintf(sqlquery,
 	                  "SELECT name, setting "
 	                  "  FROM pg_settings "
-	                  " WHERE name IN ('data_directory', 'config_file', 'hba_file', 'ident_file')");
+	                  " WHERE name IN ('data_directory', 'config_file', 'hba_file', 'ident_file', 'stats_temp_directory')");
 	log_debug(_("standby clone: %s\n"), sqlquery);
 	res = PQexec(conn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
@@ -758,49 +780,40 @@ do_standby_clone(void)
 			strncpy(master_hba_file, PQgetvalue(res, i, 1), MAXFILENAME);
 		else if (strcmp(PQgetvalue(res, i, 0), "ident_file") == 0)
 			strncpy(master_ident_file, PQgetvalue(res, i, 1), MAXFILENAME);
+		else if (strcmp(PQgetvalue(res, i, 0), "stats_temp_directory") == 0)
+			strncpy(master_stats_temp_directory, PQgetvalue(res, i, 1), MAXFILENAME);
 		else
 			log_warning(_("unknown parameter: %s\n"), PQgetvalue(res, i, 0));
 	}
 	PQclear(res);
 
-	/* if dest_dir hasn't been provided, guess it from master */
-	if (runtime_options.dest_dir[0])
+	log_info(_("Succesfully connected to primary. Current installation size is %s\n"), get_cluster_size(conn));
+
+	/*
+	 * XXX  master_xlog_directory should be discovered from master configuration
+	 * but it is not possible via SQL. We need to use a command via ssh
+	 */
+	maxlen_snprintf(master_xlog_directory, "%s/pg_xlog", master_data_directory);
+	if (test_mode)
 	{
-		strncpy(runtime_options.dest_dir, master_data_directory, MAXFILENAME);
-		flag_autoguess = true;
+		strncpy(local_data_directory, runtime_options.dest_dir, MAXFILENAME);
+		strncpy(local_config_file, runtime_options.dest_dir, MAXFILENAME);
+		strncpy(local_hba_file, runtime_options.dest_dir, MAXFILENAME);
+		strncpy(local_ident_file, runtime_options.dest_dir, MAXFILENAME);
+		maxlen_snprintf(local_stats_temp_directory, "%s/pg_stat_tmp", runtime_options.dest_dir);
+		maxlen_snprintf(local_xlog_directory, "%s/pg_xlog", runtime_options.dest_dir);
 	}
-	/* Check this directory could be used as a PGDATA dir */
-	if (!create_pgdir(runtime_options.dest_dir, runtime_options.force))
+	else
 	{
-		PQfinish(conn);
-		return;
+		strncpy(local_data_directory, master_data_directory, MAXFILENAME);
+		strncpy(local_config_file, master_config_file, MAXFILENAME);
+		strncpy(local_hba_file, master_hba_file, MAXFILENAME);
+		strncpy(local_ident_file, master_ident_file, MAXFILENAME);
+		strncpy(local_stats_temp_directory, master_stats_temp_directory, MAXFILENAME);
+		strncpy(local_xlog_directory, master_xlog_directory, MAXFILENAME);
 	}
 
-
-	/* Check if the tablespace locations exists and that we can write to them */
-	sprintf(sqlquery, "select spclocation from pg_tablespace where spcname not in ('pg_default', 'pg_global')");
-	res = PQexec(conn, sqlquery);
-	if (PQresultStatus(res) != PGRES_TUPLES_OK)
-	{
-		fprintf(stderr, "Can't get info about tablespaces: %s\n", PQerrorMessage(conn));
-		PQclear(res);
-		PQfinish(conn);
-		return;
-	}
-	for (i = 0; i < PQntuples(res); i++)
-	{
-		char *tblspc_dir = NULL;
-
-		tblspc_dir = PQgetvalue(res, i, 0);
-		/* Check this directory could be used as a PGDATA dir */
-		if (!create_pgdir(tblspc_dir, runtime_options.force))
-		{
-			PQclear(res);
-			PQfinish(conn);
-			return;
-		}
-	}
-	PQclear(res);
+	log_notice(_("Starting backup...\n"));
 
 	/*
 	 * inform the master we will start a backup and get the first XLog filename
@@ -831,6 +844,14 @@ do_standby_clone(void)
 
 	PQclear(res);
 
+	/* Check the directory could be used as a PGDATA dir */
+	if (!create_pgdir(local_data_directory, runtime_options.force))
+	{
+		log_err(_("%s: couldn't use directory %s ...\nUse --force option to force\n"),
+		        progname, local_data_directory);
+		goto stop_backup;
+	}
+
 	/*
 	 * 1) first move global/pg_control
 	 *
@@ -846,17 +867,15 @@ do_standby_clone(void)
 	 */
 
 	/* need to create the global sub directory */
-	maxlen_snprintf(master_control_file, "%s/global/pg_control",
-	                master_data_directory);
-	maxlen_snprintf(local_control_file, "%s/global", runtime_options.dest_dir);
+	maxlen_snprintf(master_control_file, "%s/global/pg_control", master_data_directory);
+	maxlen_snprintf(local_control_file, "%s/global", local_data_directory);
+	log_info(_("standby clone: master control file '%s'\n"), master_control_file);
 	if (!create_directory(local_control_file))
 	{
 		log_err(_("%s: couldn't create directory %s ...\n"),
-		        progname, runtime_options.dest_dir);
+		        progname, local_control_file);
 		goto stop_backup;
 	}
-
-	log_info(_("standby clone: master control file '%s'\n"), master_control_file);
 	r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
 	                      master_control_file, local_control_file, false);
 	if (r != 0)
@@ -867,7 +886,7 @@ do_standby_clone(void)
 
 	log_info(_("standby clone: master data directory '%s'\n"), master_data_directory);
 	r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
-	                      master_data_directory, runtime_options.dest_dir, true);
+	                      master_data_directory, local_data_directory, true);
 	if (r != 0)
 	{
 		log_warning(_("standby clone: failed copying master data directory '%s'\n"), master_data_directory);
@@ -878,6 +897,8 @@ do_standby_clone(void)
 	 * Copy tablespace locations, i'm doing this separately because i couldn't
 	 * find and appropiate rsync option but besides we could someday make all
 	 * these rsync happen concurrently
+	 * XXX We may not do that if we are in test_mode but it does not hurt too much
+	 * (except if a tablespace is created during the test)
 	 */
 	sqlquery_snprintf(sqlquery,
 	                  "SELECT spclocation "
@@ -905,31 +926,8 @@ do_standby_clone(void)
 	}
 
 	log_info(_("standby clone: master config file '%s'\n"), master_config_file);
-	/* need to create the global sub directory */
-	sprintf(master_control_file, "%s/global/pg_control", master_data_directory);
-	sprintf(local_control_file, "%s/global", runtime_options.dest_dir);
-	if (!create_directory(local_control_file))
-	{
-		fprintf(stderr, _("%s: couldn't create directory %s ... "),
-		        progname, runtime_options.dest_dir);
-		goto stop_backup;
-	}
-
-	r = copy_remote_files(runtime_options.host, runtime_options.remote_user, master_control_file, local_control_file, false);
-	if (r != 0)
-		goto stop_backup;
-
-	r = copy_remote_files(runtime_options.host, runtime_options.remote_user, master_data_directory, runtime_options.dest_dir, true);
-	if (r != 0)
-		goto stop_backup;
-
-	if (flag_autoguess)
-		r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
-	                      master_config_file, master_config_file, false);
-	else
-		r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
-	                      master_config_file, runtime_options.dest_dir, false);
-
+	r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
+						  master_config_file, local_config_file, false);
 	if (r != 0)
 	{
 		log_warning(_("standby clone: failed copying master config file '%s'\n"), master_config_file);
@@ -937,11 +935,7 @@ do_standby_clone(void)
 	}
 
 	log_info(_("standby clone: master hba file '%s'\n"), master_hba_file);
-	if (flag_autoguess)
-		r = copy_remote_files(runtime_options.host, runtime_options.remote_user, master_hba_file, master_hba_file, false);
-	else
-		r = copy_remote_files(runtime_options.host, runtime_options.remote_user, master_hba_file, runtime_options.dest_dir, false);
-
+	r = copy_remote_files(runtime_options.host, runtime_options.remote_user, master_hba_file, local_hba_file, false);
 	if (r != 0)
 	{
 		log_warning(_("standby clone: failed copying master hba file '%s'\n"), master_hba_file);
@@ -949,12 +943,8 @@ do_standby_clone(void)
 	}
 
 	log_info(_("standby clone: master ident file '%s'\n"), master_ident_file);
-	if (flag_autoguess)
-		r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
-	    	                  master_ident_file, master_ident_file, false);
-	else
-		r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
-	    	                  master_ident_file, runtime_options.dest_dir, false);
+	r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
+						  master_ident_file, local_ident_file, false);
 	if (r != 0)
 	{
 		log_warning(_("standby clone: failed copying master ident file '%s'\n"), master_ident_file);
@@ -1015,27 +1005,35 @@ stop_backup:
 	 * We need to create the pg_xlog sub directory too, I'm reusing a variable
 	 * here.
 	 */
-	maxlen_snprintf(local_control_file, "%s/pg_xlog", runtime_options.dest_dir);
-	if (!create_directory(local_control_file))
+	if (!create_directory(local_xlog_directory))
 	{
 		log_err(_("%s: couldn't create directory %s, you will need to do it manually...\n"),
-		        progname, runtime_options.dest_dir);
+		        progname, local_xlog_directory);
 		r = ERR_NEEDS_XLOG; /* continue, but eventually exit returning error */
 	}
 
 	/* Finally, write the recovery.conf file */
-	create_recovery_file(runtime_options.dest_dir, NULL);
+	create_recovery_file(local_data_directory, NULL);
 
 	/*
 	 * We don't start the service yet because we still may want to
 	 * move the directory
 	 */
-	log_info(_("%s standby clone complete\n"), progname);
+	log_notice(_("%s standby clone complete\n"), progname);
 
 	/*  HINT message : what to do next ? */
 	if (flag_success)
-		log_info(_("HINT: You can now start your postgresql server\nfor example : pg_ctl -D %s start\n"), runtime_options.dest_dir);
-
+	{
+		log_notice("HINT: You can now start your postgresql server\n");
+		if (test_mode)
+		{
+			log_notice(_("for example : pg_ctl -D %s start\n"), local_data_directory);
+		}
+		else
+		{
+			log_notice("for example : /etc/init.d/postgresql start\n");
+		}
+	}
 	exit(r);
 }
 
@@ -1284,7 +1282,7 @@ do_witness_create(void)
 	int			r = 0;
 	int			i;
 
-	char	master_version[MAXVERSIONSTR];
+	char		master_version[MAXVERSIONSTR];
 
 	char    	createcommand[MAXLEN];
 	char		master_hba_file[MAXLEN];
