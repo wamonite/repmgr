@@ -226,7 +226,7 @@ is_pg_dir(char *dir)
 	int		r;
 
 	// test pgdata
-	xsnprintf(path, buf_sz, "%s/PG_VERSION", dir)
+	xsnprintf(path, buf_sz, "%s/PG_VERSION", dir);
 	if (stat(path, &sb) == 0)
 		return true;
 
