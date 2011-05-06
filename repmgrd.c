@@ -51,8 +51,6 @@ char    myClusterName[MAXLEN];
 /* Local info */
 t_configuration_options local_options;
 int     myLocalMode = STANDBY_MODE;
-int     myLocalId   = -1;
-char	myLocalConninfo[MAXLEN];
 PGconn *myLocalConn = NULL;
 
 /* Primary info */
@@ -694,7 +692,7 @@ do_failover(void)
 	}
 
 	/* once we know who is the best candidate, promote it */
-	if (best_candidate.nodeId == myLocalId)
+	if (best_candidate.nodeId == local_options.node)
 	{
 		if (verbose)
 			log_info(_("%s: This node is the best candidate to be the new primary, promoting..."),
