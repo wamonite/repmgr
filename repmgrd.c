@@ -671,7 +671,7 @@ do_failover(void)
 	 * determine which one is the best candidate to promote to primary
 	 * loop starting on 1 because 0 was assigned as the first best_candidate
 	 */
-	for (i = 1; i <= total_nodes; i++)
+	for (i = 1; i < total_nodes - 1; i++)
 	{
 		if (!nodes[i].is_ready)
 			continue;
