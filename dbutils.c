@@ -25,7 +25,7 @@ PGconn *
 establishDBConnection(const char *conninfo, const bool exit_on_error)
 {
 	/* Make a connection to the database */
-	PGconn *conn = NULL; 
+	PGconn *conn = NULL;
 	char    connection_string[MAXLEN];
 
 	strcpy(connection_string, conninfo);

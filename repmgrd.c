@@ -161,7 +161,7 @@ main(int argc, char **argv)
 	parse_config(config_file, &local_options);
 	if (local_options.node == -1)
 	{
-		log_err(_("Node information is missing. "
+		log_err(_("Node information is missing.\n"
 		          "Check the configuration file, or provide one if you have not done so.\n"));
 		exit(ERR_BAD_CONFIG);
 	}
@@ -309,7 +309,7 @@ main(int argc, char **argv)
 		}
 		break;
 	default:
-		log_err(_("%s: Unrecognized mode for node %d"), progname, local_options.node);
+		log_err(_("%s: Unrecognized mode for node %d\n"), progname, local_options.node);
 	}
 
 	/* Prevent a double-free */
@@ -585,7 +585,7 @@ do_failover(void)
 	 * we sleep the monitor time + one second
 	 * we bet it should be enough for other repmgrd to update their own data
 	 */
-	sleep(SLEEP_MONITOR+1);
+	sleep(SLEEP_MONITOR + 1);
 
 	/* get a list of standby nodes, including myself */
 	sprintf(sqlquery, "SELECT * "
@@ -598,7 +598,7 @@ do_failover(void)
 	res1 = PQexec(myLocalConn, sqlquery);
 	if (PQresultStatus(res1) != PGRES_TUPLES_OK)
 	{
-		log_err(_("Can't get nodes info: %s"), PQerrorMessage(myLocalConn));
+		log_err(_("Can't get nodes info: %s\n"), PQerrorMessage(myLocalConn));
 		PQclear(res1);
 		PQfinish(myLocalConn);
 		exit(ERR_DB_QUERY);
@@ -620,8 +620,8 @@ do_failover(void)
 		res2 = PQexec(nodeConn, sqlquery);
 		if (PQresultStatus(res2) != PGRES_TUPLES_OK)
 		{
-			log_info(_("Can't get node's last standby location: %s"), PQerrorMessage(nodeConn));
-			log_info(_("Connection details: %s"), nodeConninfo);
+			log_info(_("Can't get node's last standby location: %s\n"), PQerrorMessage(nodeConn));
+			log_info(_("Connection details: %s\n"), nodeConninfo);
 			PQclear(res2);
 			PQfinish(nodeConn);
 			continue;
@@ -630,7 +630,7 @@ do_failover(void)
 		visible_nodes++;
 
 		if (sscanf(PQgetvalue(res2, 0, 0), "%X/%X", &uxlogid, &uxrecoff) != 2)
-			log_info(_("could not parse transaction log location \"%s\""), PQgetvalue(res2, 0, 0));
+			log_info(_("could not parse transaction log location \"%s\"\n"), PQgetvalue(res2, 0, 0));
 
 		nodes[i].nodeId = node;
 		nodes[i].xlog_location.xlogid = uxlogid;
@@ -656,8 +656,9 @@ do_failover(void)
 	 */
 	if (visible_nodes < (total_nodes / 2.0))
 	{
-		log_err(_("Can't reach most of the nodes.\n Let the other standby servers decide which one will be the primary.\n"
-		          "Manual action will be needed to readd this node to the cluster."));
+		log_err(_("Can't reach most of the nodes.\n"
+		          "Let the other standby servers decide which one will be the primary.\n"
+		          "Manual action will be needed to readd this node to the cluster.\n"));
 		exit(ERR_FAILOVER_FAIL);
 	}
 
@@ -695,9 +696,9 @@ do_failover(void)
 	if (best_candidate.nodeId == local_options.node)
 	{
 		if (verbose)
-			log_info(_("%s: This node is the best candidate to be the new primary, promoting..."),
+			log_info(_("%s: This node is the best candidate to be the new primary, promoting...\n"),
 			         progname);
-		log_debug(_("promote command is: \"%s\""), local_options.promote_command);
+		log_debug(_("promote command is: \"%s\"\n"), local_options.promote_command);
 		r = system(local_options.promote_command);
 		if (r != 0)
 		{
@@ -708,9 +709,13 @@ do_failover(void)
 	else
 	{
 		if (verbose)
-			log_info(_("%s: Node %d is the best candidate to be the new primary, we should follow it..."),
+			log_info(_("%s: Node %d is the best candidate to be the new primary, we should follow it...\n"),
 			         progname, best_candidate.nodeId);
-		log_debug(_("follow command is: \"%s\""), local_options.follow_command);
+		log_debug(_("follow command is: \"%s\"\n"), local_options.follow_command);
+		/*
+		 * New Primary need some time to be promoted.
+		 * The follow command should take care of that.
+		 */
 		r = system(local_options.follow_command);
 		if (r != 0)
 		{
@@ -739,19 +744,19 @@ CheckPrimaryConnection(void)
 	{
 		if (!is_pgup(primaryConn))
 		{
-			log_warning(_("\n%s: Connection to master has been lost, trying to recover... %i seconds before failover decision\n"), progname, (SLEEP_RETRY*(NUM_RETRY-connection_retries)));
+			log_warning(_("%s: Connection to master has been lost, trying to recover... %i seconds before failover decision\n"), progname, (SLEEP_RETRY*(NUM_RETRY-connection_retries)));
 			/* wait SLEEP_RETRY seconds between retries */
 			sleep(SLEEP_RETRY);
 		}
 		else
 		{
-			log_info(_("\n%s: Connection to master has been restored.\n"), progname);
+			log_info(_("%s: Connection to master has been restored.\n"), progname);
 			break;
 		}
 	}
 	if (!is_pgup(primaryConn))
 	{
-		log_err(_("\n%s: We couldn't reconnect for long enough, exiting...\n"), progname);
+		log_err(_("%s: We couldn't reconnect for long enough, exiting...\n"), progname);
 		/* XXX Anything else to do here? */
 		return false;
 	}
@@ -943,7 +948,7 @@ update_shared_memory(char *last_wal_standby_applied)
 	res = PQexec(myLocalConn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		log_warning(_("Cannot update this standby's shared memory: %s"), PQerrorMessage(myLocalConn));
+		log_warning(_("Cannot update this standby's shared memory: %s\n"), PQerrorMessage(myLocalConn));
 		/* XXX is this enough reason to terminate this repmgrd? */
 	}
 	PQclear(res);
@@ -963,7 +968,7 @@ update_registration(void)
 	res = PQexec(primaryConn, sqlquery);
 	if (PQresultStatus(res) != PGRES_COMMAND_OK)
 	{
-		log_err(_("Cannot update registration: %s"), PQerrorMessage(primaryConn));
+		log_err(_("Cannot update registration: %s\n"), PQerrorMessage(primaryConn));
 		CloseConnections();
 		exit(ERR_DB_CON);
 	}

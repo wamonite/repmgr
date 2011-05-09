@@ -988,7 +988,7 @@ stop_backup:
 
 	if (runtime_options.verbose)
 		log_info(_("%s requires primary to keep WAL files %s until at least %s\n"),
-	    	     progname, first_wal_segment, last_wal_segment);
+		         progname, first_wal_segment, last_wal_segment);
 
 	/* Finished with the database connection now */
 	PQclear(res);

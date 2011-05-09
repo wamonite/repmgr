@@ -230,6 +230,10 @@ reload_configuration(char *config_file, t_configuration_options *orig_options)
 
 		strcpy (orig_options->loglevel, new_options.loglevel);
 		strcpy (orig_options->logfacility, new_options.logfacility);
+
+		logger_shutdown();
+		XXX do we have progname here ?
+		logger_init(progname, orig_options.loglevel, orig_options.logfacility);
 	*/
 
 	return true;
