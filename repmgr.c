@@ -1308,8 +1308,7 @@ do_witness_create(void)
 	masterconn = PQconnectdbParams(keywords, values, true);
 	if (!masterconn)
 	{
-		fprintf(stderr, _("%s: could not connect to master\n"),
-		        progname);
+		log_err(_("%s: could not connect to master\n"), progname);
 		return;
 	}
 
@@ -1318,7 +1317,7 @@ do_witness_create(void)
 	if (strcmp(master_version, "") == 0)
 	{
 		PQfinish(masterconn);
-		fprintf(stderr, _("%s needs master to be PostgreSQL 9.0 or better\n"), progname);
+		log_err(_("%s needs master to be PostgreSQL 9.0 or better\n"), progname);
 		return;
 	}
 
@@ -1326,12 +1325,11 @@ do_witness_create(void)
 	if (is_standby(masterconn))
 	{
 		PQfinish(masterconn);
-		fprintf(stderr, "The command should not run on a standby node\n");
+		log_err(_("The command should not run on a standby node\n"));
 		return;
 	}
 
-	if (runtime_options.verbose)
-		printf(_("Succesfully connected to primary.\n"));
+	log_info(_("Succesfully connected to primary.\n"));
 
 	/*
 	 * To create a witness server we need to:
@@ -1343,10 +1341,12 @@ do_witness_create(void)
 	/* Create the cluster for witness */
 	/* We assume the pg_ctl script is in the PATH */
 	sprintf(script, "pg_ctl -D %s init", runtime_options.dest_dir);
+	log_info("Initialize cluster for witness: %s.\n", script);
+
 	r = system(script);
 	if (r != 0)
 	{
-		fprintf(stderr, "Can't iniatialize cluster for witness server\n");
+		log_err("Can't iniatialize cluster for witness server\n");
 		return;
 	}
 
@@ -1358,8 +1358,8 @@ do_witness_create(void)
 	pg_conf = fopen(buf, "a");
 	if (pg_conf == NULL)
 	{
-		fprintf(stderr, _("\n%s: could not open \"%s\" for adding extra config: %s\n"), progname, buf, strerror(errno));
-		exit(1);
+		log_err(_("\n%s: could not open \"%s\" for adding extra config: %s\n"), progname, buf, strerror(errno));
+		exit(ERR_BAD_CONFIG);
 	}
 
 	snprintf(buf, sizeof(buf), "\n#Configuration added by %s\n", progname);
@@ -1382,10 +1382,11 @@ do_witness_create(void)
 	sprintf(sqlquery, "SELECT name, setting "
 	        "  FROM pg_settings "
 	        " WHERE name IN ('hba_file')");
+	log_debug(_("witness create: %s"), sqlquery);
 	res = PQexec(masterconn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
-		fprintf(stderr, "Can't get info about pg_hba.conf: %s\n", PQerrorMessage(masterconn));
+		log_err(_("Can't get info about pg_hba.conf: %s\n"), PQerrorMessage(masterconn));
 		PQclear(res);
 		PQfinish(masterconn);
 		return;
@@ -1395,7 +1396,7 @@ do_witness_create(void)
 		if (strcmp(PQgetvalue(res, i, 0), "hba_file") == 0)
 			strcpy(master_hba_file, PQgetvalue(res, i, 1));
 		else
-			fprintf(stderr, _("uknown parameter: %s"), PQgetvalue(res, i, 0));
+			log_err(_("uknown parameter: %s"), PQgetvalue(res, i, 0));
 	}
 	PQclear(res);
 
@@ -1404,16 +1405,17 @@ do_witness_create(void)
 	                      false);
 	if (r != 0)
 	{
-		fprintf(stderr, "[ERROR]: Can't rsync the pg_hba.conf file from master\n");
+		log_err(_("Can't rsync the pg_hba.conf file from master\n"));
 		return;
 	}
 
 	/* start new instance */
 	sprintf(script, "pg_ctl -D %s start", runtime_options.dest_dir);
+	log_info(_("Start cluster for witness: %s"), script);
 	r = system(script);
 	if (r != 0)
 	{
-		fprintf(stderr, "[ERROR]: Can't start cluster for witness server\n");
+		log_err(_("Can't start cluster for witness server\n"));
 		return;
 	}
 
@@ -1422,10 +1424,10 @@ do_witness_create(void)
 	                  "VALUES (%d, '%s', '%s', %d, true)",
 	                  repmgr_schema, options.node, options.cluster_name, options.conninfo);
 
+	log_debug(_("witness create: %s"), sqlquery);
 	if (!PQexec(masterconn, sqlquery))
 	{
-		fprintf(stderr, "Cannot insert node details, %s\n",
-		        PQerrorMessage(masterconn));
+		log_err(_("Cannot insert node details, %s\n"), PQerrorMessage(masterconn));
 		PQfinish(masterconn);
 		return;
 	}
@@ -1443,25 +1445,26 @@ do_witness_create(void)
 	if (!(strcmp(getenv("USER"), values[2]) == 0))
 	{
 		sprintf(createcommand, "createuser -p %s -s %s", runtime_options.localport, values[2]);
+		log_info("creating user for witness: %s", createcommand);
 		r = system(createcommand);
 		if (r != 0)
 		{
-			fprintf(stderr, "Can't create local user\n");
+			log_err("Can't create local user\n");
 			return;
 		}
 		sprintf(createcommand, "createdb -p %s -O %s %s", runtime_options.localport, values[2], values[3]);
+		log_info("creating database for witness: %s", createcommand);
 		r = system(createcommand);
 		if (r != 0)
 		{
-			fprintf(stderr, "Can't create local db\n");
+			log_err("Can't create local db\n");
 			return;
 		}
 	}
 	/* establish a connection to the witness, and create the schema */
 	witnessconn = establishDBConnection(options.conninfo, true);
 
-	if (runtime_options.verbose)
-		log_info(_("Starting copy of configuration from master"));
+	log_info(_("Starting copy of configuration from master"));
 
 	if (!create_schema(witnessconn))
 	{
