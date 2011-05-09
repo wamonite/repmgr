@@ -546,6 +546,7 @@ do_failover(void)
 
 	int		total_nodes = 0;
 	int		visible_nodes = 0;
+	bool	find_best = false;
 
 	int		i;
 	int		r;
@@ -662,20 +663,22 @@ do_failover(void)
 		exit(ERR_FAILOVER_FAIL);
 	}
 
-	/* start with the first node, and then move on to the next one */
-	best_candidate.nodeId                = nodes[0].nodeId;
-	best_candidate.xlog_location.xlogid  = nodes[0].xlog_location.xlogid;
-	best_candidate.xlog_location.xrecoff = nodes[0].xlog_location.xrecoff;
-	best_candidate.is_ready              = nodes[0].is_ready;
-
 	/*
 	 * determine which one is the best candidate to promote to primary
-	 * loop starting on 1 because 0 was assigned as the first best_candidate
 	 */
-	for (i = 1; i < total_nodes - 1; i++)
+	for (i = 0; i < total_nodes - 1; i++)
 	{
 		if (!nodes[i].is_ready)
 			continue;
+		else if (!find_best)
+		{
+			/* start with the first ready node, and then move on to the next one */
+			best_candidate.nodeId                = nodes[i].nodeId;
+			best_candidate.xlog_location.xlogid  = nodes[i].xlog_location.xlogid;
+			best_candidate.xlog_location.xrecoff = nodes[i].xlog_location.xrecoff;
+			best_candidate.is_ready              = nodes[i].is_ready;
+			find_best = true;
+		}
 
 		/* we use the macros provided by xlogdefs.h to compare XLogPtr */
 		/*
@@ -693,7 +696,7 @@ do_failover(void)
 	}
 
 	/* once we know who is the best candidate, promote it */
-	if (best_candidate.nodeId == local_options.node)
+	if (find_best && (best_candidate.nodeId == local_options.node))
 	{
 		if (verbose)
 			log_info(_("%s: This node is the best candidate to be the new primary, promoting...\n"),
@@ -706,7 +709,7 @@ do_failover(void)
 			exit(ERR_BAD_CONFIG);
 		}
 	}
-	else
+	else if (find_best)
 	{
 		if (verbose)
 			log_info(_("%s: Node %d is the best candidate to be the new primary, we should follow it...\n"),
@@ -722,6 +725,11 @@ do_failover(void)
 			log_err(_("%s: follow command failed. You could check and try it manually.\n"), progname);
 			exit(ERR_BAD_CONFIG);
 		}
+	}
+	else
+	{
+		log_err(_("%s: Did not find candidates. You should check and try manually.\n"), progname);
+		exit(ERR_FAILOVER_FAIL);
 	}
 
 	/* and reconnect to the local database */
