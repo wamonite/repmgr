@@ -1443,23 +1443,26 @@ do_witness_create(void)
 		we suppose it is the same in the repmgr.conf (obviously it is preferable)
 		FIXME this is fragile and its a temporary solution
 	*/
-	if (!(strcmp(getenv("USER"), values[2]) == 0))
+	if (getenv("USER"))
 	{
-		sprintf(createcommand, "createuser -p %s -s %s", runtime_options.localport, values[2]);
-		log_info("creating user for witness: %s", createcommand);
-		r = system(createcommand);
-		if (r != 0)
+		if (!(strcmp(getenv("USER"), values[2]) == 0))
 		{
-			log_err("Can't create local user\n");
-			return;
-		}
-		sprintf(createcommand, "createdb -p %s -O %s %s", runtime_options.localport, values[2], values[3]);
-		log_info("creating database for witness: %s", createcommand);
-		r = system(createcommand);
-		if (r != 0)
-		{
-			log_err("Can't create local db\n");
-			return;
+			sprintf(createcommand, "createuser -p %s -s %s", runtime_options.localport, values[2]);
+			log_info("creating user for witness: %s", createcommand);
+			r = system(createcommand);
+			if (r != 0)
+			{
+				log_err("Can't create local user\n");
+				return;
+			}
+			sprintf(createcommand, "createdb -p %s -O %s %s", runtime_options.localport, values[2], values[3]);
+			log_info("creating database for witness: %s", createcommand);
+			r = system(createcommand);
+			if (r != 0)
+			{
+				log_err("Can't create local db\n");
+				return;
+			}
 		}
 	}
 	/* establish a connection to the witness, and create the schema */
