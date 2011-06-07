@@ -757,6 +757,15 @@ do_standby_clone(void)
 		}
 	}
 
+	r = test_ssh_connection(runtime_options.host, runtime_options.remote_user);
+	if (r != 0)
+	{
+		log_err(_("%s: Aborting, remote host %s is not reachable.\n"), progname, runtime_options.host);
+		goto stop_backup;
+	}
+
+	log_notice(_("Starting backup...\n"));
+
 	/* Get the data directory full path and the configuration files location */
 	sqlquery_snprintf(sqlquery,
 	                  "SELECT name, setting "
@@ -884,6 +893,8 @@ do_standby_clone(void)
 		        progname, local_control_file);
 		goto stop_backup;
 	}
+
+	log_info(_("standby clone: master control file '%s'\n"), master_control_file);
 	r = copy_remote_files(runtime_options.host, runtime_options.remote_user,
 	                      master_control_file, local_control_file,
 	                      false);

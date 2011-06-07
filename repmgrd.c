@@ -161,7 +161,7 @@ main(int argc, char **argv)
 	parse_config(config_file, &local_options);
 	if (local_options.node == -1)
 	{
-		log_err(_("Node information is missing.\n"
+		log_err(_("Node information is missing. "
 		          "Check the configuration file, or provide one if you have not done so.\n"));
 		exit(ERR_BAD_CONFIG);
 	}
