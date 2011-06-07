@@ -51,7 +51,7 @@
 static bool create_recovery_file(const char *data_dir, char *master_conninfo);
 static int test_ssh_connection(char *host, char *remote_user);
 static int	copy_remote_files(char *host, char *remote_user, char *remote_path,
-                              char *local_path, bool is_directory);
+                             char *local_path, bool is_directory);
 static bool check_parameters_for_action(const int action);
 static bool create_schema(PGconn *conn);
 static bool copy_configuration(PGconn *masterconn, PGconn *witnessconn);
