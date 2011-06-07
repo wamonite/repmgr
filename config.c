@@ -170,6 +170,7 @@ parse_line(char *buff, char *name, char *value)
 	trim(value);
 }
 
+<<<<<<< HEAD:config.c
 
 bool
 reload_configuration(char *config_file, t_configuration_options *orig_options)
