@@ -585,6 +585,7 @@ do_standby_register(void)
 		sqlquery_snprintf(sqlquery, "DELETE FROM %s.repl_nodes "
 		                  " WHERE id = %d",
 		                  repmgr_schema, options.node);
+
 		log_debug(_("standby register: %s\n"), sqlquery);
 
 		if (!PQexec(master_conn, sqlquery))
