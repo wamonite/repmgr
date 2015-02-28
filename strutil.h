@@ -1,6 +1,6 @@
 /*
  * strutil.h
- * Copyright (C) 2ndQuadrant, 2010-2014
+ * Copyright (C) 2ndQuadrant, 2010-2015
  *
  *
  * This program is free software: you can redistribute it and/or modify
@@ -22,7 +22,7 @@
 #define _STRUTIL_H_
 
 #include <stdlib.h>
-#include <errcode.h>
+#include "errcode.h"
 
 #define QUERY_STR_LEN	8192
 #define MAXLEN			1024

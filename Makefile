@@ -1,6 +1,6 @@
 #
 # Makefile
-# Copyright (c) 2ndQuadrant, 2010-2014
+# Copyright (c) 2ndQuadrant, 2010-2015
 
 repmgrd_OBJS = dbutils.o config.o repmgrd.o log.o strutil.o
 repmgr_OBJS = dbutils.o check_dir.o config.o repmgr.o log.o strutil.o
@@ -36,11 +36,23 @@ endif
 install: install_prog install_ext
 
 install_prog:
-	$(INSTALL_PROGRAM) repmgrd$(X) '$(DESTDIR)$(bindir)'
-	$(INSTALL_PROGRAM) repmgr$(X) '$(DESTDIR)$(bindir)'
+	mkdir -p '$(DESTDIR)$(bindir)'
+	$(INSTALL_PROGRAM) repmgrd$(X) '$(DESTDIR)$(bindir)/'
+	$(INSTALL_PROGRAM) repmgr$(X) '$(DESTDIR)$(bindir)/'
 
 install_ext:
 	$(MAKE) -C sql install
+
+install_rhel:
+	mkdir -p '$(DESTDIR)/etc/init.d/'
+	$(INSTALL_PROGRAM) RHEL/repmgrd.init '$(DESTDIR)/etc/init.d/repmgrd'
+	mkdir -p '$(DESTDIR)/etc/sysconfig/'
+	$(INSTALL_PROGRAM) RHEL/repmgrd.sysconfig '$(DESTDIR)/etc/sysconfig/repmgrd'
+	mkdir -p '$(DESTDIR)/etc/repmgr/'
+	$(INSTALL_PROGRAM) repmgr.conf.sample '$(DESTDIR)/etc/repmgr/'
+	mkdir -p '$(DESTDIR)/usr/bin/'
+	$(INSTALL_PROGRAM) repmgrd$(X) '$(DESTDIR)/usr/bin/'
+	$(INSTALL_PROGRAM) repmgr$(X) '$(DESTDIR)/usr/bin/'
 
 ifneq (,$(DATA)$(DATA_built))
 	@for file in $(addprefix $(srcdir)/, $(DATA)) $(DATA_built); do \
@@ -66,4 +78,5 @@ deb: repmgrd repmgr
 	dpkg-deb --build debian
 	mv debian.deb ../postgresql-repmgr-9.0_1.0.0.deb
 	rm -rf ./debian/usr
+
 

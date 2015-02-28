@@ -1,6 +1,6 @@
 /*
  * repmgr.c - Command interpreter for the repmgr
- * Copyright (C) 2ndQuadrant, 2010-2014
+ * Copyright (C) 2ndQuadrant, 2010-2015
  *
  * This module is a command-line utility to easily setup a cluster of
  * hot standby servers for an HA environment
@@ -100,6 +100,7 @@ main(int argc, char **argv)
 		{"host", required_argument, NULL, 'h'},
 		{"port", required_argument, NULL, 'p'},
 		{"username", required_argument, NULL, 'U'},
+		{"superuser", required_argument, NULL, 'S'},
 		{"dest-dir", required_argument, NULL, 'D'},
 		{"local-port", required_argument, NULL, 'l'},
 		{"config-file", required_argument, NULL, 'f'},
@@ -111,6 +112,7 @@ main(int argc, char **argv)
 		{"ignore-rsync-warning", no_argument, NULL, 'I'},
 		{"min-recovery-apply-delay", required_argument, NULL, 'r'},
 		{"verbose", no_argument, NULL, 'v'},
+		{"initdb-no-pwprompt", no_argument, NULL, 1},
 		{NULL, 0, NULL, 0}
 	};
 
@@ -136,7 +138,7 @@ main(int argc, char **argv)
 	}
 
 
-	while ((c = getopt_long(argc, argv, "d:h:p:U:D:l:f:R:w:k:FWIvr:", long_options,
+	while ((c = getopt_long(argc, argv, "d:h:p:U:S:D:l:f:R:w:k:FWIvr:", long_options,
 							&optindex)) != -1)
 	{
 		switch (c)
@@ -153,6 +155,9 @@ main(int argc, char **argv)
 				break;
 			case 'U':
 				strncpy(runtime_options.username, optarg, MAXLEN);
+				break;
+			case 'S':
+				strncpy(runtime_options.superuser, optarg, MAXLEN);
 				break;
 			case 'D':
 				strncpy(runtime_options.dest_dir, optarg, MAXFILENAME);
@@ -207,6 +212,9 @@ main(int argc, char **argv)
 				break;
 			case 'v':
 				runtime_options.verbose = true;
+				break;
+			case 1:
+				runtime_options.initdb_no_pwprompt = true;
 				break;
 			default:
 				usage();
@@ -307,6 +315,12 @@ main(int argc, char **argv)
 			strncpy(runtime_options.dbname, getenv("PGUSER"), MAXLEN);
 		else
 			strncpy(runtime_options.dbname, DEFAULT_DBNAME, MAXLEN);
+	}
+
+	/* We check that port number is not null */
+	if (!runtime_options.masterport[0])
+	{
+	        strncpy(runtime_options.masterport, DEFAULT_MASTER_PORT, MAXLEN);
 	}
 
 	/* Read the configuration file, normally repmgr.conf */
@@ -1369,11 +1383,11 @@ do_standby_promote(void)
 	char		standby_version[MAXVERSIONSTR];
 
 	/* We need to connect to check configuration */
-	log_info(_("%s connecting to master database\n"), progname);
+	log_info(_("%s connecting to standby database\n"), progname);
 	conn = establish_db_connection(options.conninfo, true);
 
 	/* we need v9 or better */
-	log_info(_("%s connected to master, checking its state\n"), progname);
+	log_info(_("%s connected to standby, checking its state\n"), progname);
 	ret = pg_version(conn, standby_version);
 	if (ret == NULL || strcmp(standby_version, "") == 0)
 	{
@@ -1458,7 +1472,7 @@ do_standby_promote(void)
 	}
 	else
 	{
-		log_err(_("%s: STANDBY PROMOTE successful.  You should REINDEX any hash indexes you have.\n"),
+		log_notice(_("%s: STANDBY PROMOTE successful.  You should REINDEX any hash indexes you have.\n"),
 				progname);
 	}
 	PQfinish(conn);
@@ -1703,14 +1717,19 @@ do_witness_create(void)
 	 */
 
 	/* Create the cluster for witness */
-	sprintf(script, "%s/pg_ctl %s -D %s init -o \"-W\"", options.pg_bindir,
-			options.pgctl_options, runtime_options.dest_dir);
+	if (!runtime_options.superuser[0])
+		strncpy(runtime_options.superuser, "postgres", MAXLEN);
+
+	sprintf(script, "%s/pg_ctl %s -D %s init -o \"%s-U %s\"", options.pg_bindir,
+			options.pgctl_options, runtime_options.dest_dir,
+			runtime_options.initdb_no_pwprompt ? "" : "-W ",
+			runtime_options.superuser);
 	log_info("Initialize cluster for witness: %s.\n", script);
 
 	r = system(script);
 	if (r != 0)
 	{
-		log_err("Can't iniatialize cluster for witness server\n");
+		log_err("Can't initialize cluster for witness server\n");
 		PQfinish(masterconn);
 		exit(ERR_BAD_CONFIG);
 	}
@@ -1745,11 +1764,58 @@ do_witness_create(void)
 
 	fclose(pg_conf);
 
+
+	/* start new instance */
+	sprintf(script, "%s/pg_ctl %s -w -D %s start", options.pg_bindir,
+			options.pgctl_options, runtime_options.dest_dir);
+	log_info(_("Start cluster for witness: %s\n"), script);
+	r = system(script);
+	if (r != 0)
+	{
+		log_err(_("Can't start cluster for witness server\n"));
+		PQfinish(masterconn);
+		exit(ERR_BAD_CONFIG);
+	}
+
+	/* check if we need to create a user */
+	if (runtime_options.username[0] && runtime_options.localport[0] && strcmp(runtime_options.username,"postgres")!=0 )
+        {
+		/* create required user needs to be superuser to create untrusted language function in c */
+		sprintf(script, "%s/createuser -p %s --superuser --login -U %s %s", options.pg_bindir,
+				runtime_options.localport, runtime_options.superuser, runtime_options.username);
+		log_info("Create user for witness db: %s.\n", script);
+
+		r = system(script);
+		if (r != 0)
+		{
+			log_err("Can't create user for witness server\n");
+			PQfinish(masterconn);
+			exit(ERR_BAD_CONFIG);
+		}
+	}
+
+	/* check if we need to create a database */
+	if(runtime_options.dbname[0] && strcmp(runtime_options.dbname,"postgres")!=0 && runtime_options.localport[0])
+	{
+		/* create required db */
+		sprintf(script, "%s/createdb -p %s -U %s --owner=%s %s",
+				options.pg_bindir, runtime_options.localport, runtime_options.superuser, runtime_options.username, runtime_options.dbname);
+		log_info("Create database for witness db: %s.\n", script);
+
+		r = system(script);
+		if (r != 0)
+		{
+			log_err("Can't create database for witness server\n");
+			PQfinish(masterconn);
+			exit(ERR_BAD_CONFIG);
+		}
+	}
+
 	/* Get the pg_hba.conf full path */
 	sqlquery_snprintf(sqlquery, "SELECT name, setting "
 					  "  FROM pg_settings "
 					  " WHERE name IN ('hba_file')");
-	log_debug(_("witness create: %s"), sqlquery);
+	log_debug(_("witness create: %s\n"), sqlquery);
 	res = PQexec(masterconn, sqlquery);
 	if (PQresultStatus(res) != PGRES_TUPLES_OK)
 	{
@@ -1764,7 +1830,7 @@ do_witness_create(void)
 		if (strcmp(PQgetvalue(res, i, 0), "hba_file") == 0)
 			strcpy(master_hba_file, PQgetvalue(res, i, 1));
 		else
-			log_err(_("uknown parameter: %s"), PQgetvalue(res, i, 0));
+			log_err(_("unknown parameter: %s"), PQgetvalue(res, i, 0));
 	}
 	PQclear(res);
 
@@ -1778,14 +1844,14 @@ do_witness_create(void)
 		exit(ERR_BAD_CONFIG);
 	}
 
-	/* start new instance */
-	sprintf(script, "%s/pg_ctl %s -w -D %s start", options.pg_bindir,
+	/* reload to adapt for changed pg_hba.conf */
+	sprintf(script, "%s/pg_ctl %s -w -D %s reload", options.pg_bindir,
 			options.pgctl_options, runtime_options.dest_dir);
-	log_info(_("Start cluster for witness: %s"), script);
+	log_info(_("Reload cluster config for witness: %s"), script);
 	r = system(script);
 	if (r != 0)
 	{
-		log_err(_("Can't start cluster for witness server\n"));
+		log_err(_("Can't reload cluster for witness server\n"));
 		PQfinish(masterconn);
 		exit(ERR_BAD_CONFIG);
 	}
@@ -1824,6 +1890,23 @@ do_witness_create(void)
 		PQfinish(masterconn);
 		PQfinish(witnessconn);
 		exit(ERR_BAD_CONFIG);
+	}
+
+	/* drop superuser powers if needed */
+	if (runtime_options.username[0] && runtime_options.localport[0] && strcmp(runtime_options.username,"postgres")!=0 )
+	{
+		sqlquery_snprintf(sqlquery, "ALTER ROLE %s NOSUPERUSER", runtime_options.username);
+		log_info("Drop superuser powers on user for witness db: %s.\n", sqlquery);
+
+		res = PQexec(witnessconn, sqlquery);
+		if (!res || PQresultStatus(res) != PGRES_COMMAND_OK)
+		{
+			log_err(_("Cannot alter user privileges, %s\n"),
+					PQerrorMessage(witnessconn));
+			PQfinish(masterconn);
+			PQfinish(witnessconn);
+			exit(ERR_DB_QUERY);
+		}
 	}
 	PQfinish(masterconn);
 	PQfinish(witnessconn);
@@ -1866,6 +1949,8 @@ help(const char *progname)
 	printf(_("  -l, --local-port=PORT               standby or witness server local port\n"));
 	printf(_("  -f, --config-file=PATH              path to the configuration file\n"));
 	printf(_("  -R, --remote-user=USERNAME          database server username for rsync\n"));
+	printf(_("  -S, --superuser=USERNAME            superuser username for witness database\n" \
+			 "                                      (default: postgres)\n"));
 	printf(_("  -w, --wal-keep-segments=VALUE       minimum value for the GUC\n" \
 			 "                                      wal_keep_segments (default: 5000)\n"));
 	printf(_("  -I, --ignore-rsync-warning          ignore rsync partial transfer warning\n"));
@@ -1874,8 +1959,8 @@ help(const char *progname)
 	printf(_("  -F, --force                         force potentially dangerous operations\n" \
 			 "                                      to happen\n"));
 	printf(_("  -W, --wait                          wait for a master to appear\n"));
-	printf(_("	-r, --min-recovery-apply-delay=VALUE  enable recovery time delay, value has to be a valid time atom (e.g. 5min)"));
-
+	printf(_("  -r, --min-recovery-apply-delay=VALUE  enable recovery time delay, value has to be a valid time atom (e.g. 5min)\n"));
+	printf(_("  --initdb-no-pwprompt                don't require superuser password when running initdb\n"));
 	printf(_("\n%s performs some tasks like clone a node, promote it or making follow\n"), progname);
 	printf(_("another node and then exits.\n\n"));
 	printf(_("COMMANDS:\n"));
@@ -1957,22 +2042,22 @@ test_ssh_connection(char *host, char *remote_user)
 	 * found `true' because the target OS may differ from the source
 	 * OS
 	 */
-	const char *truebin_pathes[] = {
+	const char *truebin_paths[] = {
 		"/bin/true",
 		"/usr/bin/true",
 		NULL
 	};
 
 	/* Check if we have ssh connectivity to host before trying to rsync */
-	for(i = 0; truebin_pathes[i] && r != 0; ++i)
+	for(i = 0; truebin_paths[i] && r != 0; ++i)
 	{
 		if (!remote_user[0])
 			maxlen_snprintf(script, "ssh -o Batchmode=yes %s %s %s",
-							options.ssh_options, host, truebin_pathes[i]);
+							options.ssh_options, host, truebin_paths[i]);
 		else
 			maxlen_snprintf(script, "ssh -o Batchmode=yes %s %s -l %s %s",
 							options.ssh_options, host, remote_user,
-							truebin_pathes[i]);
+							truebin_paths[i]);
 
 		log_debug(_("command is: %s\n"), script);
 		r = system(script);
@@ -2000,7 +2085,7 @@ copy_remote_files(char *host, char *remote_user, char *remote_path,
 		maxlen_snprintf(rsync_flags, "%s", options.rsync_options);
 
 	if (runtime_options.force)
-		strcat(rsync_flags, " --delete");
+		strcat(rsync_flags, " --delete --checksum");
 
 	if (!remote_user[0])
 	{
@@ -2014,7 +2099,7 @@ copy_remote_files(char *host, char *remote_user, char *remote_path,
 	if (is_directory)
 	{
 		strcat(rsync_flags,
-			   " --exclude=pg_xlog* --exclude=pg_log* --exclude=pg_control --exclude=*.pid");
+			   " --exclude=pg_xlog/* --exclude=pg_log/* --exclude=pg_control --exclude=*.pid");
 		maxlen_snprintf(script, "rsync %s %s:%s/* %s",
 						rsync_flags, host_string, remote_path, local_path);
 	}
@@ -2368,13 +2453,14 @@ static bool
 copy_configuration(PGconn *masterconn, PGconn *witnessconn)
 {
 	char		sqlquery[MAXLEN];
-	PGresult   *res;
+	PGresult   *res1;
+	PGresult   *res2;
 	int			i;
 
 	sqlquery_snprintf(sqlquery, "TRUNCATE TABLE %s.repl_nodes", repmgr_schema);
 	log_debug("copy_configuration: %s\n", sqlquery);
-	res = PQexec(witnessconn, sqlquery);
-	if (!res || PQresultStatus(res) != PGRES_COMMAND_OK)
+	res1 = PQexec(witnessconn, sqlquery);
+	if (!res1 || PQresultStatus(res1) != PGRES_COMMAND_OK)
 	{
 		fprintf(stderr, "Cannot clean node details in the witness, %s\n",
 				PQerrorMessage(witnessconn));
@@ -2383,33 +2469,35 @@ copy_configuration(PGconn *masterconn, PGconn *witnessconn)
 
 	sqlquery_snprintf(sqlquery, "SELECT id, name, conninfo, priority, witness FROM %s.repl_nodes",
 					  repmgr_schema);
-	res = PQexec(masterconn, sqlquery);
-	if (PQresultStatus(res) != PGRES_TUPLES_OK)
+	res1 = PQexec(masterconn, sqlquery);
+	if (PQresultStatus(res1) != PGRES_TUPLES_OK)
 	{
 		fprintf(stderr, "Can't get configuration from master: %s\n",
 				PQerrorMessage(masterconn));
-		PQclear(res);
+		PQclear(res1);
 		return false;
 	}
-	for (i = 0; i < PQntuples(res); i++)
+	for (i = 0; i < PQntuples(res1); i++)
 	{
 		sqlquery_snprintf(sqlquery, "INSERT INTO %s.repl_nodes(id, cluster, name, conninfo, priority, witness) "
 						  "VALUES (%d, '%s', '%s', '%s', %d, '%s')",
-						  repmgr_schema, atoi(PQgetvalue(res, i, 0)),
-						  options.cluster_name, PQgetvalue(res, i, 1),
-						  PQgetvalue(res, i, 2),
-						  atoi(PQgetvalue(res, i, 3)),
-						  PQgetvalue(res, i, 4));
+						  repmgr_schema, atoi(PQgetvalue(res1, i, 0)),
+						  options.cluster_name, PQgetvalue(res1, i, 1),
+						  PQgetvalue(res1, i, 2),
+						  atoi(PQgetvalue(res1, i, 3)),
+						  PQgetvalue(res1, i, 4));
 
-		res = PQexec(witnessconn, sqlquery);
-		if (!res || PQresultStatus(res) != PGRES_COMMAND_OK)
+		res2 = PQexec(witnessconn, sqlquery);
+		if (!res2 || PQresultStatus(res2) != PGRES_COMMAND_OK)
 		{
 			fprintf(stderr, "Cannot copy configuration to witness, %s\n",
 					PQerrorMessage(witnessconn));
-			PQclear(res);
+			PQclear(res2);
 			return false;
 		}
+		PQclear(res2);
 	}
+	PQclear(res1);
 
 	return true;
 }

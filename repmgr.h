@@ -1,6 +1,6 @@
 /*
  * repmgr.h
- * Copyright (c) 2ndQuadrant, 2010-2014
+ * Copyright (c) 2ndQuadrant, 2010-2015
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -56,11 +56,13 @@ typedef struct
 	char		dest_dir[MAXFILENAME];
 	char		config_file[MAXFILENAME];
 	char		remote_user[MAXLEN];
+	char		superuser[MAXLEN];
 	char		wal_keep_segments[MAXLEN];
 	bool		verbose;
 	bool		force;
 	bool		wait_for_master;
 	bool		ignore_rsync_warn;
+	bool		initdb_no_pwprompt;
 
 	char		masterport[MAXLEN];
 	char		localport[MAXLEN];
@@ -71,6 +73,6 @@ typedef struct
 	char min_recovery_apply_delay[MAXLEN];
 }	t_runtime_options;
 
-#define T_RUNTIME_OPTIONS_INITIALIZER { "", "", "", "", "", "", DEFAULT_WAL_KEEP_SEGMENTS, false, false, false, false, "", "", 0, "" }
+#define T_RUNTIME_OPTIONS_INITIALIZER { "", "", "", "", "", "", "", DEFAULT_WAL_KEEP_SEGMENTS, false, false, false, false, false, "", "", 0, "" }
 
 #endif
