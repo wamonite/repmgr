@@ -1,7 +1,7 @@
 /*
  * strutil.c
  *
- * Copyright (C) 2ndQuadrant, 2010-2015
+ * Copyright (c) 2ndQuadrant, 2010-2017
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -86,4 +86,22 @@ maxlen_snprintf(char *str, const char *format,...)
 	va_end(arglist);
 
 	return retval;
+}
+
+
+/*
+ * Escape a string for use as a parameter in recovery.conf
+ * Caller must free returned value
+ */
+char *
+escape_recovery_conf_value(const char *src)
+{
+	char	   *result = escape_single_quotes_ascii(src);
+
+	if (!result)
+	{
+		fprintf(stderr, _("%s: out of memory\n"), progname());
+		exit(ERR_INTERNAL);
+	}
+	return result;
 }

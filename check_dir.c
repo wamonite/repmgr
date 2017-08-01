@@ -1,6 +1,6 @@
 /*
  * check_dir.c - Directories management functions
- * Copyright (C) 2ndQuadrant, 2010-2015
+ * Copyright (c) 2ndQuadrant, 2010-2017
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,13 +23,18 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <ftw.h>
 
 /* NB: postgres_fe must be included BEFORE check_dir */
-#include "postgres_fe.h"
-#include "check_dir.h"
+#include <libpq-fe.h>
+#include <postgres_fe.h>
 
+#include "check_dir.h"
 #include "strutil.h"
 #include "log.h"
+
+static bool _create_pg_dir(char *dir, bool force, bool for_witness);
+static int unlink_dir_callback(const char *fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf);
 
 /*
  * make sure the directory either doesn't exist or is empty
@@ -98,7 +103,7 @@ create_dir(char *dir)
 	if (mkdir_p(dir, 0700) == 0)
 		return true;
 
-	log_err(_("Could not create directory \"%s\": %s\n"),
+	log_err(_("unable to create directory \"%s\": %s\n"),
 			dir, strerror(errno));
 
 	return false;
@@ -244,6 +249,19 @@ is_pg_dir(char *dir)
 bool
 create_pg_dir(char *dir, bool force)
 {
+	return _create_pg_dir(dir, force, false);
+}
+
+bool
+create_witness_pg_dir(char *dir, bool force)
+{
+	return _create_pg_dir(dir, force, true);
+}
+
+
+static bool
+_create_pg_dir(char *dir, bool force, bool for_witness)
+{
 	bool		pg_dir = false;
 
 	/* Check this directory could be used as a PGDATA dir */
@@ -255,7 +273,7 @@ create_pg_dir(char *dir, bool force)
 
 			if (!create_dir(dir))
 			{
-				log_err(_("couldn't create directory \"%s\"...\n"),
+				log_err(_("unable to create directory \"%s\"...\n"),
 						dir);
 				return false;
 			}
@@ -267,7 +285,7 @@ create_pg_dir(char *dir, bool force)
 
 			if (!set_dir_permissions(dir))
 			{
-				log_err(_("could not change permissions of directory \"%s\": %s\n"),
+				log_err(_("unable to change permissions of directory \"%s\": %s\n"),
 						dir, strerror(errno));
 				return false;
 			}
@@ -279,21 +297,33 @@ create_pg_dir(char *dir, bool force)
 
 			pg_dir = is_pg_dir(dir);
 
-			/*
-			 * we use force to reduce the time needed to restore a node which
-			 * turn async after a failover or anything else
-			 */
+
 			if (pg_dir && force)
 			{
+
+				/*
+				 * The witness server does not store any data other than a copy of the
+				 * repmgr metadata, so in --force mode we can simply overwrite the
+				 * directory.
+				 *
+				 * For non-witness servers, we'll leave the data in place, both to reduce
+				 * the risk of unintentional data loss and to make it possible for the
+				 * data directory to be brought up-to-date with rsync.
+				 */
+				if (for_witness)
+				{
+					log_notice(_("deleting existing data directory \"%s\"\n"), dir);
+					nftw(dir, unlink_dir_callback, 64, FTW_DEPTH | FTW_PHYS);
+				}
 				/* Let it continue */
 				break;
 			}
 			else if (pg_dir && !force)
 			{
-				log_warning(_("\nThis looks like a PostgreSQL directory.\n"
-							  "If you are sure you want to clone here, "
-							  "please check there is no PostgreSQL server "
-							  "running and use the --force option\n"));
+				log_hint(_("This looks like a PostgreSQL directory.\n"
+							"If you are sure you want to clone here, "
+							"please check there is no PostgreSQL server "
+							"running and use the -F/--force option\n"));
 				return false;
 			}
 
@@ -305,4 +335,15 @@ create_pg_dir(char *dir, bool force)
 			return false;
 	}
 	return true;
+}
+
+static int
+unlink_dir_callback(const char *fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
+{
+    int rv = remove(fpath);
+
+    if (rv)
+        perror(fpath);
+
+    return rv;
 }

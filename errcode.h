@@ -1,6 +1,6 @@
 /*
  * errcode.h
- * Copyright (C) 2ndQuadrant, 2010-2015
+ * Copyright (c) 2ndQuadrant, 2010-2017
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,16 +25,21 @@
 #define SUCCESS 0
 #define ERR_BAD_CONFIG 1
 #define ERR_BAD_RSYNC 2
-#define ERR_STOP_BACKUP 3
 #define ERR_NO_RESTART 4
-#define ERR_NEEDS_XLOG 5
 #define ERR_DB_CON 6
 #define ERR_DB_QUERY 7
 #define ERR_PROMOTED 8
-#define ERR_BAD_PASSWORD 9
 #define ERR_STR_OVERFLOW 10
 #define ERR_FAILOVER_FAIL 11
 #define ERR_BAD_SSH 12
 #define ERR_SYS_FAILURE 13
+#define ERR_BAD_BASEBACKUP 14
+#define ERR_INTERNAL 15
+#define ERR_MONITORING_FAIL 16
+#define ERR_BAD_BACKUP_LABEL 17
+#define ERR_SWITCHOVER_FAIL 18
+#define ERR_BARMAN 19
+#define ERR_REGISTRATION_SYNC 20
+
 
 #endif   /* _ERRCODE_H_ */

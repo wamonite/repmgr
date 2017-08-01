@@ -9,6 +9,7 @@
 #include "fmgr.h"
 #include "access/xlog.h"
 #include "miscadmin.h"
+#include "replication/walreceiver.h"
 #include "storage/ipc.h"
 #include "storage/lwlock.h"
 #include "storage/procarray.h"
@@ -58,6 +59,7 @@ PG_FUNCTION_INFO_V1(repmgr_update_last_updated);
 PG_FUNCTION_INFO_V1(repmgr_get_last_updated);
 
 
+
 /*
  * Module load callback
  */
@@ -81,7 +83,12 @@ _PG_init(void)
 	 * resources in repmgr_shmem_startup().
 	 */
 	RequestAddinShmemSpace(repmgr_memsize());
+
+#if (PG_VERSION_NUM >= 90600)
+	RequestNamedLWLockTranche("repmgr", 1);
+#else
 	RequestAddinLWLocks(1);
+#endif
 
 	/*
 	 * Install hooks.
@@ -126,7 +133,11 @@ repmgr_shmem_startup(void)
 	if (!found)
 	{
 		/* First time through ... */
+#if (PG_VERSION_NUM >= 90600)
+		shared_state->lock = &(GetNamedLWLockTranche("repmgr"))->lock;
+#else
 		shared_state->lock = LWLockAssign();
+#endif
 		snprintf(shared_state->location,
 				 sizeof(shared_state->location), "%X/%X", 0, 0);
 	}
@@ -230,3 +241,5 @@ repmgr_get_last_updated(PG_FUNCTION_ARGS)
 
 	PG_RETURN_TIMESTAMPTZ(last_updated);
 }
+
+

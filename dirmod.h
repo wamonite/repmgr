@@ -1,5 +1,5 @@
 /*
- * check_dir.h
+ * dirmod.h
  * Copyright (c) 2ndQuadrant, 2010-2017
  *
  * This program is free software: you can redistribute it and/or modify
@@ -17,15 +17,7 @@
  *
  */
 
-#ifndef _REPMGR_CHECK_DIR_H_
-#define _REPMGR_CHECK_DIR_H_
-
-int			mkdir_p(char *path, mode_t omode);
-int			check_dir(char *dir);
-bool		create_dir(char *dir);
-bool		set_dir_permissions(char *dir);
-bool		is_pg_dir(char *dir);
-bool		create_pg_dir(char *dir, bool force);
-bool		create_witness_pg_dir(char *dir, bool force);
+#ifndef _DIRMOD_H_
+#define _DIRMOD_H_
 
 #endif

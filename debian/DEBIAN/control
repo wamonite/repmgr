@@ -1,9 +1,9 @@
 Package: repmgr-auto
-Version: 2.0beta2
+Version: 3.2dev
 Section: database
 Priority: optional
 Architecture: all
-Depends: rsync, postgresql-9.0 | postgresql-9.1 | postgresql-9.2 | postgresql-9.3
-Maintainer: Jaime Casanova <jaime@2ndQuadrant.com>
+Depends: rsync, postgresql-9.3 | postgresql-9.4 | postgresql-9.5
+Maintainer: Self built package <user@localhost>
 Description: PostgreSQL replication setup, magament and monitoring
  has two main executables

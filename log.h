@@ -1,6 +1,6 @@
 /*
  * log.h
- * Copyright (c) 2ndQuadrant, 2010-2015
+ * Copyright (c) 2ndQuadrant, 2010-2017
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,10 @@
 #define REPMGR_SYSLOG 1
 #define REPMGR_STDERR 2
 
-void
+#define OM_COMMAND_LINE 1
+#define OM_DAEMON       2
+
+extern void
 stderr_log_with_level(const char *level_name, int level, const char *fmt,...)
 __attribute__((format(PG_PRINTF_ATTRIBUTE, 3, 4)));
 
@@ -112,15 +115,28 @@ __attribute__((format(PG_PRINTF_ATTRIBUTE, 3, 4)));
 #endif
 
 
+int			detect_log_level(const char *level);
+
 /* Logger initialisation and shutdown */
+
+bool		logger_init(t_configuration_options * opts, const char *ident);
+
 bool		logger_shutdown(void);
 
-bool logger_init(t_configuration_options * opts, const char *ident,
-			const char *level, const char *facility);
+void		logger_set_verbose(void);
+void		logger_set_terse(void);
 
-void		logger_min_verbose(int minimum);
+void		log_detail(const char *fmt, ...)
+__attribute__((format(PG_PRINTF_ATTRIBUTE, 1, 2)));
+void		log_hint(const char *fmt, ...)
+__attribute__((format(PG_PRINTF_ATTRIBUTE, 1, 2)));
+void		log_verbose(int level, const char *fmt, ...)
+__attribute__((format(PG_PRINTF_ATTRIBUTE, 2, 3)));
 
 extern int	log_type;
 extern int	log_level;
+extern int	verbose_logging;
+extern int	terse_logging;
+extern int	logger_output_mode;
 
-#endif
+#endif /* _REPMGR_LOG_H_ */
